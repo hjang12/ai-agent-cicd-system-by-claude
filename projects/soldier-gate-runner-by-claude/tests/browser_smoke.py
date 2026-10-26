@@ -30,12 +30,42 @@ def main(screenshot=None):
         page.goto(url)
         assert page.title() == "Soldier Gate Runner", page.title()
         assert page.locator("#status").get_attribute("data-version"), "missing data-version"
-        sample = page.evaluate(
-            "() => Array.from(document.getElementById('game').getContext('2d').getImageData(180, 600, 1, 1).data)"
-        )
-        assert sample[3] == 255, f"canvas not drawn: {sample}"
+        assert page.locator("#ov-btn").is_visible() and page.locator("#ov-btn").inner_text() == "시작"
+        status = lambda: page.evaluate("window.__game.state.status")
+        assert status() == "ready"
+
+        page.click("#ov-btn")
+        assert status() == "playing" and page.locator("#overlay").is_hidden()
+        page.evaluate("window.__game.state.count = 60; window.__game.fastForward(24)")
         if screenshot:
             page.screenshot(path=screenshot)
+        before = page.evaluate("window.__game.state.enemies.reduce((a, e) => a + e.hp, 0)")
+        assert before < 208, f"no enemy damage: {before}"
+
+        # win path
+        page.evaluate("window.__game.state.count = 300; window.__game.fastForward(120)")
+        assert status() == "won", status()
+        assert "승리" in page.locator("#ov-title").inner_text() and page.locator("#ov-btn").inner_text() == "다시 시작"
+
+        # restart clears previous round state
+        page.click("#ov-btn")
+        assert status() == "playing"
+        fresh = page.evaluate("({c: window.__game.state.count, h: window.__game.state.gates.map(g => g.hits || 0)})")
+        assert fresh["c"] == 12 and sum(fresh["h"]) == 0, fresh
+
+        # lose path
+        page.evaluate("window.__game.state.count = 1; window.__game.fastForward(60)")
+        assert status() == "lost", status()
+        assert "패배" in page.locator("#ov-title").inner_text()
+
+        # keyboard + drag input
+        page.click("#ov-btn")
+        page.keyboard.down("ArrowRight"); page.wait_for_timeout(300); page.keyboard.up("ArrowRight")
+        assert page.evaluate("window.__game.state.u") > 0, "keyboard input ignored"
+        box = page.locator("#game").bounding_box()
+        page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.8)
+        page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.25, box["y"] + box["height"] * 0.8); page.mouse.up()
+        assert page.evaluate("window.__game.state.u") < 0, "drag input ignored"
         browser.close()
     server.shutdown()
     assert not errors, f"console errors: {errors}"

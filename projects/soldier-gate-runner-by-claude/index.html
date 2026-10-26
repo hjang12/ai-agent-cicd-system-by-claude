@@ -7,27 +7,22 @@
   <style>
     html, body { margin: 0; height: 100%; background: #101820; color: #e8f1f8; font-family: system-ui, sans-serif; }
     body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
-    canvas { width: min(92vw, 420px); aspect-ratio: 9 / 16; border-radius: 8px; background: #7ec8ff; }
+    #stage { position: relative; width: min(92vw, 420px); }
+    canvas { display: block; width: 100%; aspect-ratio: 9 / 16; border-radius: 8px; background: #7ec8ff; touch-action: none; }
+    #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: rgba(8,16,28,0.7); border-radius: 8px; }
+    #overlay[hidden] { display: none; }
+    #overlay h2 { margin: 0; font-size: 1.6rem; } #overlay p { font-size: 0.95rem; opacity: 0.9; }
+    #ov-btn { font-size: 1.1rem; padding: 10px 28px; border: 0; border-radius: 8px; background: #2f6fd0; color: #fff; cursor: pointer; }
     h1 { margin: 0; font-size: 1.25rem; }
     p { margin: 0; font-size: 0.85rem; opacity: 0.75; }
   </style>
 </head>
 <body>
   <h1 id="title">Soldier Gate Runner</h1>
-  <canvas id="game" width="360" height="640" aria-label="게임 화면"></canvas>
-  <p id="status" data-version="0.0.1-m0">M0 skeleton — 게임 구현 전 배포 경로 검증용 페이지</p>
-  <script>
-    (function () {
-      var canvas = document.getElementById('game');
-      var ctx = canvas.getContext('2d');
-      var w = canvas.width, h = canvas.height, horizon = h * 0.35;
-      ctx.fillStyle = '#7ec8ff'; ctx.fillRect(0, 0, w, horizon);
-      ctx.fillStyle = '#5fae4a'; ctx.fillRect(0, horizon, w, h - horizon);
-      ctx.fillStyle = '#6b6f76';
-      ctx.beginPath();
-      ctx.moveTo(w * 0.42, horizon); ctx.lineTo(w * 0.58, horizon);
-      ctx.lineTo(w * 0.95, h); ctx.lineTo(w * 0.05, h); ctx.closePath(); ctx.fill();
-    })();
-  </script>
+  <div id="stage"><canvas id="game" width="360" height="640" aria-label="게임 화면"></canvas>
+    <div id="overlay"><h2 id="ov-title"></h2><p id="ov-sub"></p><button id="ov-btn" type="button">시작</button></div></div>
+  <p id="status" data-version="0.1.0-m1">M1 — 코어 루프 (임시 도형 그래픽)</p>
+  <script src="src/game-logic.js"></script>
+  <script src="src/game.js"></script>
 </body>
 </html>

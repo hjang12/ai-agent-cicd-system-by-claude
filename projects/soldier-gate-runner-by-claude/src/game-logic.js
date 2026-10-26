@@ -35,19 +35,20 @@
 
   function createState() {
     return { status: 'ready', t: 0, count: C.START_COUNT, u: 0, cool: 0, hurt: 0, bullets: [], progress: 0,
+      // Order along the road (d = distance ahead): gates, shooting gate, enemy group, gates, enemy group, boss.
       gates: [
-        { type: 'add', value: 10, u: -0.5, d: 0.9, half: 0.45 }, { type: 'mul', value: 2, u: 0.5, d: 0.9, half: 0.45 },
-        { type: 'shoot', base: 1, hits: 0, u: 0, d: 0.5, half: 0.4 },
-        { type: 'sub', value: 6, u: -0.5, d: 0.2, half: 0.45 }, { type: 'add', value: 15, u: 0.5, d: 0.2, half: 0.45 }],
-      enemies: [{ id: 'e1', hp: 18, max: 18, u: -0.3, d: 0.62, boss: false }, { id: 'e2', hp: 30, max: 30, u: 0.35, d: 0.45, boss: false },
-        { id: 'boss', hp: 160, max: 160, u: 0, d: 0.34, boss: true }].map(function (e, i) { e.d += i * 0.0; return e; }) };
+        { type: 'add', value: 10, u: -0.5, d: 0.85, half: 0.45 }, { type: 'mul', value: 2, u: 0.5, d: 0.85, half: 0.45 },
+        { type: 'shoot', base: 1, hits: 0, max: 30, u: 0, d: 1.15, half: 0.4 },
+        { type: 'sub', value: 6, u: -0.5, d: 1.9, half: 0.45 }, { type: 'add', value: 15, u: 0.5, d: 1.9, half: 0.45 }],
+      enemies: [{ id: 'e1', hp: 18, max: 18, u: -0.3, d: 1.55, boss: false }, { id: 'e2', hp: 30, max: 30, u: 0.35, d: 2.3, boss: false },
+        { id: 'boss', hp: 160, max: 160, u: 0, d: 2.8, boss: true }] };
   }
   function start(s) { s.status = 'playing'; return s; }
 
   function target(s) {
     var best = null;
     s.enemies.forEach(function (e) { if (e.hp > 0 && e.d < C.ENGAGE_D && (!best || e.d < best.d)) best = { u: e.u, d: e.d, kind: 'enemy', ref: e }; });
-    s.gates.forEach(function (g) { if (g.type === 'shoot' && !g.done && g.d < C.ENGAGE_D && (!best || g.d < best.d)) best = { u: g.u, d: g.d, kind: 'gate', ref: g }; });
+    s.gates.forEach(function (g) { if (g.type === 'shoot' && !g.done && g.base + g.hits < g.max && g.d < C.ENGAGE_D && (!best || g.d < best.d)) best = { u: g.u, d: g.d, kind: 'gate', ref: g }; });
     return best;
   }
   function fire(s, tgt) {
@@ -74,7 +75,7 @@
       b.d += C.BULLET_SPEED * dt;
       b.u = b.u0 + (b.ref.u - b.u0) * clamp((b.d - b.d0) / Math.max(b.ref.d - b.d0, 0.05), 0, 1);
       if (b.kind === 'enemy' && b.ref.hp > 0 && Math.abs(b.u - b.ref.u) < 0.14 && b.d >= b.ref.d - 0.03) { b.ref.hp = Math.max(0, b.ref.hp - b.w); return false; }
-      if (b.kind === 'gate' && !b.ref.done && b.d >= b.ref.d - 0.03) { b.ref.hits += b.w; return false; }
+      if (b.kind === 'gate' && !b.ref.done && b.d >= b.ref.d - 0.03) { b.ref.hits = Math.min(b.ref.max - b.ref.base, b.ref.hits + b.w); return false; }
       return b.d <= 1 && b.d >= -0.05;
     });
     var engaged = s.enemies.filter(function (e) { return e.hp > 0 && e.d <= C.ENGAGE_D; }).length;
