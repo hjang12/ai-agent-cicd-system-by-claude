@@ -1,0 +1,53 @@
+# Development Task Registry
+
+이 문서는 Workspace 전체의 Development Task를 식별하고 Context Recovery를 시작하기 위한 통합 Registry입니다.
+
+상세 개발 내용과 장기 이력은 Registry에 중복 저장하지 않고 각 Task가 속한 Workspace / Project의 공식 Context, Checkpoint, History에서 관리합니다.
+
+## Task ID
+
+형식: TASK-YYYYMMDD-NNNN
+
+- YYYYMMDD: Task가 Registry에 처음 등록된 날짜
+- NNNN: 해당 날짜의 4자리 일련번호
+- Task ID는 생성 후 변경하지 않습니다.
+- Project 이름, 상태, Chat 이름은 Task ID에 포함하지 않습니다.
+
+## Status
+
+| Status | 의미 |
+| --- | --- |
+| ACTIVE | 현재 진행 대상 |
+| PAUSED | 상태를 보존한 채 의도적으로 일시정지 |
+| BLOCKED | 외부 제약 또는 결정 대기로 진행 불가 |
+| COMPLETED | 목표 달성 및 검증 완료 |
+| ARCHIVED | 완료/취소 후 장기 보관 |
+
+현재 작업 후보를 탐색할 때는 ACTIVE / PAUSED / BLOCKED 상태를 확인할 수 있지만, **자동으로 재개할 수 있는 상태는 ACTIVE뿐입니다.**
+- ACTIVE: Request가 해당 Task로 식별되면 자동으로 복구·재개할 수 있습니다.
+- PAUSED: 의도적으로 일시정지된 상태이므로 명시적인 재개 의도가 확인될 때까지 자동으로 실행 Task로 선택하지 않습니다.
+- BLOCKED: 현재 진행할 수 없는 상태이므로 일반적인 "계속해" 요청만으로 실행 Task로 재개하지 않습니다. Blocker 해소 여부를 확인합니다.
+- COMPLETED / ARCHIVED: 기본 작업 후보에서 제외하며 명시적인 이력 조회 또는 후속 작업 요청이 있을 때만 참조합니다.
+
+완료/보관 Task의 ID와 이력은 유지합니다.
+
+## Current Task Registry
+
+| Task ID | Scope | Project / Area | Goal | Status | Context | Current Checkpoint | Active PR / Issue | State Summary | Last Updated |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20261026-0001 | Workspace | Governance / Workspace bootstrap | by-gpt Governance 구조를 복사해 by-claude Workspace를 초기 구성하고 Render 연동을 준비 | ACTIVE | GOVERNANCE/docs/CURRENT_STATUS.md | GOVERNANCE/docs/checkpoints/TASK-20261026-0001.md | none | Governance 1.4.7 구조 복사 및 검증 스크립트 일반화 완료. 첫 프로젝트와 Render 서비스 정의는 사용자 결정 대기. | 2026-10-26 |
+
+## Operating Rules
+
+1. Registry는 통합 탐색/선택 인덱스이며 상세 Source of Truth가 아닙니다.
+2. Task의 상세 Context와 Checkpoint는 해당 Workspace/Project 영역에 저장합니다.
+3. 같은 Project에 여러 Development Task가 존재할 수 있습니다.
+4. Last Updated가 가장 최근이라는 이유만으로 해당 Task를 자동 선택하지 않습니다.
+5. Request에서 Project, 작업 목적 또는 Task ID가 명확하면 그 Task를 선택합니다.
+6. 관련 Task가 하나뿐이면 해당 Task를 복구합니다.
+7. 여러 Task가 후보이고 Request로 구분할 수 없으면 최소한의 사용자 확인을 받습니다.
+8. 기존 Task가 없고 새로운 개발 목표를 시작하는 경우 새 Task ID를 생성하고 Registry에 등록합니다.
+9. Task가 완료되면 Registry에서 상태를 COMPLETED로 기록하고 상세 결과는 History에 남깁니다.
+10. Task를 재개할 때는 Registry → Context → Checkpoint → 실제 GitHub/CI/Deployment 순으로 현재 상태를 검증합니다.
+11. `Next Action`은 Registry Status가 `ACTIVE`인 Task에서만 실행 가능하다. 완료 Task의 Checkpoint는 결과 증거로만 읽으며, `DEFERRED` 이슈는 기록된 재검토 조건 없이는 일반 복구의 작업 후보로 올리지 않는다.
+12. `State Summary`는 Task 선택을 돕는 간단한 요약이며 실행 지시가 아닙니다. 실제 실행 단계는 Registry가 가리키는 Checkpoint의 `Next Action` 한곳에만 기록합니다. `COMPLETED` / `ARCHIVED` 요약은 종료 결과, `PAUSED` / `BLOCKED` 요약은 재개 조건 또는 Blocker만 담습니다. Status와 Checkpoint가 불일치하면 먼저 문서를 동기화하고, 과거 요약을 대체 지시로 실행하지 않습니다.
