@@ -56,3 +56,21 @@ test('gate arithmetic and fresh state on restart', () => {
   const a = G.createState(); a.gates[2].hits = 9;
   assert.strictEqual(G.createState().gates[2].hits, 0);
 });
+
+test('a full round can be won and lost, and gates never sit between the squad and a blocking enemy', () => {
+  const win = G.start(G.createState()); win.count = 300;
+  for (let i = 0; i < 60 * 240 && win.status === 'playing'; i++) G.step(win, 1 / 60, 0);
+  assert.strictEqual(win.status, 'won');
+  const lose = G.start(G.createState()); lose.count = 1;
+  for (let i = 0; i < 60 * 240 && lose.status === 'playing'; i++) G.step(lose, 1 / 60, 0);
+  assert.strictEqual(lose.status, 'lost');
+  const s = G.createState(), firstEnemy = Math.min(...s.enemies.map((e) => e.d));
+  s.gates.filter((g) => g.d < firstEnemy + 0.5).forEach((g) => assert.ok(g.d < firstEnemy || g.type !== 'shoot'));
+});
+
+test('shooting gate value is capped and never exceeds its maximum', () => {
+  const s = G.start(G.createState()); const g = s.gates.find((x) => x.type === 'shoot');
+  s.enemies = [{ id: 'far', hp: 999, max: 999, u: 0, d: 10, boss: false }]; s.gates = [g]; g.d = 0.7; s.count = 300; s.u = 0;
+  for (let i = 0; i < 20000 && !g.done; i++) G.step(s, 1 / 60, 0);
+  assert.ok(g.base + g.hits <= g.max); assert.strictEqual(g.base + g.hits, g.max);
+});
