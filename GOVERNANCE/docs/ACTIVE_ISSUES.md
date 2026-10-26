@@ -38,6 +38,7 @@
 
 | ID | Status | Priority | Scope | Summary | Impact | Next Action | Blocker | Last Verified | Related |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ISSUE-20261026-0001 | BLOCKED | P1 | CI/CD | GitHub Actions를 사용할 수 없음 (사용자 보고: 이번 달 사용량 소진). PR #1의 두 workflow가 단계 실행 없이 즉시 failure | PR CI 검증 불가, Render `autoDeployTrigger: checksPass` 배포 gate 동작 불가. 로컬 테스트로만 검증 가능 | 사용자 조치 후 PR #1의 workflow를 재실행해 통과 확인, main 병합, Render 서비스 생성 | GitHub Billing 한도 증액 또는 결제 주기 갱신 (사용자 권한) | 2026-10-26 | PR #1, runs 40288148857 / 40288148929, GOVERNANCE/docs/checkpoints/TASK-20261026-0002.md |
 
 ## Operating Rules
 
