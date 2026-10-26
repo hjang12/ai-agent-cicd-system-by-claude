@@ -19,6 +19,9 @@ class StaticSiteTest(unittest.TestCase):
     def test_no_external_resources(self):
         self.assertFalse(re.search(r"""(?:src|href)\s*=\s*["']https?://""", self.html))
         self.assertNotIn("@import", self.html)
+        for js in (SITE / "src").glob("*.js"):
+            text = js.read_text(encoding="utf-8")
+            self.assertFalse(re.search(r"https?://", text), f"external URL in {js.name}")
 
 
 if __name__ == "__main__":
