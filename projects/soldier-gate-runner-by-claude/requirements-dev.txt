@@ -1,0 +1,2 @@
+# CI-only browser smoke test dependency (not shipped to the static site)
+playwright==1.56.0
