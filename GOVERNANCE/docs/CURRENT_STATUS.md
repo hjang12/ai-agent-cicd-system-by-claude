@@ -7,7 +7,7 @@
 - Common Governance rule: `GOVERNANCE/GOVERNANCE.md`
 - Canonical Governance version file: `GOVERNANCE/VERSION`
 - Governance 1.4.7 is active on `main`. It was copied from `hjang12/ai-agent-cicd-system-by-gpt` on 2026-10-26 with only agent-name and repository-name references changed. The `by-gpt` repository was read-only during this work and is not modified.
-- GitHub `main` branch protection / Ruleset is not configured.
+- Repository visibility: public (GitHub Actions is free for standard runners on public repositories). GitHub `main` branch protection / Ruleset is not configured.
 
 ## Canonical Navigation
 
@@ -34,7 +34,7 @@ The Task Registry Status is authoritative for whether a Next Action may run.
 - `projects/soldier-gate-runner-by-claude` — 병사 게이트 러너 (정적 사이트, Render Static Site).
 - Workspace structural validation: `.github/workflows/workspace-validation.yml` (runs `tools/validate_workspace.py`).
 - Project CI: `.github/workflows/soldier-gate-runner-ci.yml` (static tests + Chromium smoke).
-- Render: root `render.yaml` declares `soldier-gate-runner-by-claude` (static, `autoDeployTrigger: checksPass`).
+- Render: root `render.yaml` declares `soldier-gate-runner-by-claude` (static, `autoDeployTrigger: checksPass`). The live Render service currently has Auto-Deploy off (ISSUE-20261026-0002); deploys are manual after main CI passes.
 
 ## Context Recovery
 

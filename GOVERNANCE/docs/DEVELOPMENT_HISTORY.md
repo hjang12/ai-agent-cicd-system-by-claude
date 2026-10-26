@@ -18,3 +18,12 @@
 - Verification / Evidence: 로컬 unittest 3개, Chromium smoke, `tools/validate_workspace.py` 통과. PR CI와 Render 배포 결과는 Checkpoint에 기록.
 - Outcome / remaining risk: 게임 로직은 M1부터 구현한다.
 
+## 2026-10-26 — GitHub Actions 한도 소진과 저장소 public 전환, M0 병합·배포
+
+- Task: `TASK-20261026-0002`
+- Requirement / Problem: 비공개 저장소의 Actions 월 사용량 소진으로 PR #1의 두 workflow가 단계 실행 없이 failure였다 (ISSUE-20261026-0001).
+- Decision / User direction: 사용자가 저장소를 public으로 전환했다. 전환 전후로 파일과 커밋 이력에서 토큰·비밀 값이 없는지 확인했다.
+- Implementation / Changed files: 빈 커밋으로 CI 재실행 → PR #1 squash 병합 → 작업 브랜치 삭제 → Render 정적 사이트 생성과 수동 배포. Render MCP는 `autoDeployTrigger: checksPass`를 지정할 수 없어 Auto-Deploy를 off로 만들었다.
+- Verification / Evidence: PR CI와 main CI 모두 success, Render deploy live. 상세는 Checkpoint 참고.
+- Outcome / remaining risk: Render Auto-Deploy 설정 불일치(ISSUE-20261026-0002). 공개 URL 응답은 사용자 확인 필요. 초기 커밋 작성자 메타데이터에 회사 이메일이 남아 있어 public 저장소에 노출된다.
+

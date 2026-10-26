@@ -38,7 +38,7 @@
 
 | ID | Status | Priority | Scope | Summary | Impact | Next Action | Blocker | Last Verified | Related |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ISSUE-20261026-0001 | BLOCKED | P1 | CI/CD | GitHub Actions를 사용할 수 없음 (사용자 보고: 이번 달 사용량 소진). PR #1의 두 workflow가 단계 실행 없이 즉시 failure | PR CI 검증 불가, Render `autoDeployTrigger: checksPass` 배포 gate 동작 불가. 로컬 테스트로만 검증 가능 | 사용자 조치 후 PR #1의 workflow를 재실행해 통과 확인, main 병합, Render 서비스 생성 | GitHub Billing 한도 증액 또는 결제 주기 갱신 (사용자 권한) | 2026-10-26 | PR #1, runs 40288148857 / 40288148929, GOVERNANCE/docs/checkpoints/TASK-20261026-0002.md |
+| ISSUE-20261026-0002 | OPEN | P2 | CI/CD | Render 서비스 `soldier-gate-runner-by-claude`의 Auto-Deploy가 off이며 `render.yaml`의 `autoDeployTrigger: checksPass`와 다름 (Render MCP가 checksPass 지정을 지원하지 않음) | main 변경이 자동 배포되지 않음. 현재는 CI 통과 확인 후 수동 배포 | Render 대시보드 Settings → Build & Deploy → Auto-Deploy를 `After CI Checks Pass`로 변경하고 설정 확인 | 사용자의 Render 대시보드 설정 | 2026-10-26 | Render service srv-dbfttoek1f9s73anmtk0, render.yaml |
 
 ## Operating Rules
 
