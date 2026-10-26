@@ -35,7 +35,8 @@
 
 | Task ID | Scope | Project / Area | Goal | Status | Context | Current Checkpoint | Active PR / Issue | State Summary | Last Updated |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TASK-20261026-0001 | Workspace | Governance / Workspace bootstrap | by-gpt Governance 구조를 복사해 by-claude Workspace를 초기 구성하고 Render 연동을 준비 | ACTIVE | GOVERNANCE/docs/CURRENT_STATUS.md | GOVERNANCE/docs/checkpoints/TASK-20261026-0001.md | none | Governance 1.4.7 구조 복사 및 검증 스크립트 일반화 완료. 첫 프로젝트와 Render 서비스 정의는 사용자 결정 대기. | 2026-10-26 |
+| TASK-20261026-0001 | Workspace | Governance / Workspace bootstrap | by-gpt Governance 구조를 복사해 by-claude Workspace를 초기 구성 | COMPLETED | GOVERNANCE/docs/CURRENT_STATUS.md | GOVERNANCE/docs/checkpoints/TASK-20261026-0001.md | none | Governance 1.4.7 복사, 검증 스크립트 일반화, Workspace validation 통과 (Run 40259038441, 40259097709). | 2026-10-26 |
+| TASK-20261026-0002 | Project | soldier-gate-runner-by-claude | 병사 게이트 러너 브라우저 게임 개발 (기획서 기준). M0: 프로젝트 골격·CI·Render 정적 사이트 | ACTIVE | projects/soldier-gate-runner-by-claude/docs/CURRENT_STATUS.md | GOVERNANCE/docs/checkpoints/TASK-20261026-0002.md | PR 진행 중 | M0 골격 구현·로컬 검증 완료. PR/CI/Render 연동 진행. | 2026-10-26 |
 
 ## Operating Rules
 
