@@ -27,3 +27,12 @@
 - Verification / Evidence: PR CI와 main CI 모두 success, Render deploy live. 상세는 Checkpoint 참고.
 - Outcome / remaining risk: Render Auto-Deploy 설정 불일치(ISSUE-20261026-0002). 공개 URL 응답은 사용자 확인 필요. 초기 커밋 작성자 메타데이터에 회사 이메일이 남아 있어 public 저장소에 노출된다.
 
+## 2026-10-27 — M1·M2 1차 배포와 Render Auto-Deploy 정렬
+
+- Task: `TASK-20261026-0002`
+- Requirement / Problem: Render Auto-Deploy가 off라 `render.yaml`의 `checksPass`와 달랐다 (ISSUE-20261026-0002).
+- Decision / User direction: 사용자가 Render 대시보드에서 Auto-Deploy를 `After CI Checks Pass`로 변경하고 이후 배포를 자동으로 진행하도록 지시했다.
+- Implementation / Changed files: 설정 변경은 대시보드(사용자). 설정 이전에 병합된 M1·M2 1차 변경은 수동 배포로 반영.
+- Verification / Evidence: Render service `autoDeployTrigger: checksPass` 확인, deploy `dep-dbg44jhsrm7s73ceufig` live (`27bf7c5`).
+- Outcome / remaining risk: 공개 URL 응답은 이 환경에서 확인하지 못해 사용자 확인 필요. 이슈 해결.
+

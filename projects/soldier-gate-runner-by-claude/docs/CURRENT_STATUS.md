@@ -3,7 +3,7 @@
 ## Current State
 - Project: soldier-gate-runner-by-claude
 - Status: ACTIVE
-- Current Version / Branch / Commit: 0.1.0-m1 / `main`
+- Current Version / Branch / Commit: 0.1.0-m1 (M2 1차) / `main` @ `27bf7c5`
 - Last Verified: 2026-10-26 (로컬 테스트, 브라우저 smoke)
 
 ## Product / Architecture
@@ -15,10 +15,10 @@
 ## Verification / Deployment (when relevant)
 - Required checks and latest result: `Soldier Gate Runner CI` (정적 테스트 + Chromium smoke), `Workspace structure validation`
 - Service / Environment: Render Static Site `soldier-gate-runner-by-claude` (`autoDeployTrigger: checksPass`)
-- Deployment state and verification time: Render deploy `dep-dbfttouk1f9s73anmut0` live (commit `5249738`, 2026-10-26). Auto-Deploy는 off(수동 배포). 공개 URL 응답은 이 환경에서 확인하지 못함.
+- Deployment state and verification time: Render deploy `dep-dbg44jhsrm7s73ceufig` live (commit `27bf7c5`, 2026-10-27). Auto-Deploy는 `After CI Checks Pass`. 공개 URL 응답은 이 환경에서 확인하지 못함.
 
 ## Development Continuity
 - Active Development Task: TASK-20261026-0002
 - Context / Checkpoint: `GOVERNANCE/docs/checkpoints/TASK-20261026-0002.md`
-- Current blocker: 없음 (병사 비주얼 단계 전에 참고 스크린샷 필요). ISSUE-20261026-0002 참고.
+- Current blocker: 없음 (병사 비주얼 단계 전에 참고 스크린샷 필요).
 - Next Action: Checkpoint의 Next Action을 따른다.

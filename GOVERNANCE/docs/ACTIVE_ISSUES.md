@@ -38,7 +38,6 @@
 
 | ID | Status | Priority | Scope | Summary | Impact | Next Action | Blocker | Last Verified | Related |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ISSUE-20261026-0002 | OPEN | P2 | CI/CD | Render 서비스 `soldier-gate-runner-by-claude`의 Auto-Deploy가 off이며 `render.yaml`의 `autoDeployTrigger: checksPass`와 다름 (Render MCP가 checksPass 지정을 지원하지 않음) | main 변경이 자동 배포되지 않음. 현재는 CI 통과 확인 후 수동 배포 | Render 대시보드 Settings → Build & Deploy → Auto-Deploy를 `After CI Checks Pass`로 변경하고 설정 확인 | 사용자의 Render 대시보드 설정 | 2026-10-26 | Render service srv-dbfttoek1f9s73anmtk0, render.yaml |
 
 ## Operating Rules
 

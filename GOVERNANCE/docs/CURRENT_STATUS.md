@@ -34,7 +34,7 @@ The Task Registry Status is authoritative for whether a Next Action may run.
 - `projects/soldier-gate-runner-by-claude` — 병사 게이트 러너 (정적 사이트, Render Static Site).
 - Workspace structural validation: `.github/workflows/workspace-validation.yml` (runs `tools/validate_workspace.py`).
 - Project CI: `.github/workflows/soldier-gate-runner-ci.yml` (static tests + Chromium smoke).
-- Render: root `render.yaml` declares `soldier-gate-runner-by-claude` (static, `autoDeployTrigger: checksPass`). The live Render service currently has Auto-Deploy off (ISSUE-20261026-0002); deploys are manual after main CI passes.
+- Render: root `render.yaml` declares `soldier-gate-runner-by-claude` (static, `autoDeployTrigger: checksPass`). The live Render service uses Auto-Deploy `After CI Checks Pass` (matches render.yaml); `27bf7c5` deployed live.
 
 ## Context Recovery
 
