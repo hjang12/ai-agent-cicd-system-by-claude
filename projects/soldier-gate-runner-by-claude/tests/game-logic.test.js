@@ -74,3 +74,32 @@ test('shooting gate value is capped and never exceeds its maximum', () => {
   for (let i = 0; i < 20000 && !g.done; i++) G.step(s, 1 / 60, 0);
   assert.ok(g.base + g.hits <= g.max); assert.strictEqual(g.base + g.hits, g.max);
 });
+
+test('every gate type and enemy approaches at the same speed', () => {
+  const s = G.start(G.createState());
+  s.gates.push({ type: 'div', value: 2, u: 0, d: 0.9, half: 0.4 });
+  const before = s.gates.map((g) => g.d).concat(s.enemies.map((e) => e.d));
+  for (let i = 0; i < 120; i++) G.step(s, 1 / 60, 0);
+  const after = s.gates.map((g) => g.d).concat(s.enemies.map((e) => e.d));
+  const moved = before.map((d, i) => d - after[i]);
+  moved.forEach((m) => assert.ok(Math.abs(m - moved[0]) < 1e-9, 'objects moved at different speeds'));
+  assert.ok(Math.abs(moved[0] - G.C.SPEED * 2) < 1e-9);
+});
+
+test('speed multiplier advances game time proportionally and matches fixed stepping', () => {
+  for (const speed of [1, 2, 3, 4]) {
+    const a = G.start(G.createState()), b = G.start(G.createState());
+    for (let i = 0; i < 30; i++) G.advance(a, 1 / 30, 0, speed);
+    for (let i = 0; i < 60 * speed; i++) G.step(b, 1 / 60, 0);
+    assert.ok(Math.abs(a.t - speed) < 1e-6, `x${speed} elapsed ${a.t}`);
+    assert.ok(Math.abs(a.gates[0].d - b.gates[0].d) < 1e-6);
+  }
+});
+
+test('bullets stay inside the road at x4 speed as well', () => {
+  const s = G.start(G.createState()); s.count = 200;
+  for (let i = 0; i < 2000 && s.status === 'playing'; i++) {
+    G.advance(s, 1 / 30, 0, 4);
+    s.bullets.forEach((b) => assert.ok(Math.abs(b.u) <= 1 && b.d <= 1.0001));
+  }
+});

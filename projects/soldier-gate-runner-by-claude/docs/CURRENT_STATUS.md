@@ -3,13 +3,13 @@
 ## Current State
 - Project: soldier-gate-runner-by-claude
 - Status: ACTIVE
-- Current Version / Branch / Commit: 0.1.0-m1 (M2 1차) / `main` @ `27bf7c5`
+- Current Version / Branch / Commit: 0.2.0-m2 (M2 1차 + 배속) / `main` @ `27bf7c5`
 - Last Verified: 2026-10-26 (로컬 테스트, 브라우저 smoke)
 
 ## Product / Architecture
 - Goal: 병사 게이트 러너 브라우저 게임 (기획서 기준). 시각적 입체감, 실제 명중 기반 전투, 도로 경계 안 탄환을 핵심으로 한다.
 - Main components: 정적 사이트 `index.html` (M0 골격 페이지)
-- Implemented capabilities (summary): M0 — 배포 경로 검증용 골격 페이지, 정적 테스트, 헤드리스 브라우저 smoke. M1 — 순수 게임 로직(`src/game-logic.js`), 화면·입력·시작/HUD/승패/재시작(`src/game.js`), Node 로직 테스트 8개, 한 판 전체를 검증하는 헤드리스 브라우저 테스트. 병사는 M2 1차 입체 표현(원작 대비 피드백 대기).
+- Implemented capabilities (summary): M0 — 배포 경로 검증용 골격 페이지, 정적 테스트, 헤드리스 브라우저 smoke. M1 — 순수 게임 로직(`src/game-logic.js`), 화면·입력·시작/HUD/승패/재시작(`src/game.js`), Node 로직 테스트 8개, 한 판 전체를 검증하는 헤드리스 브라우저 테스트. 병사는 M2 1차 입체 표현. 배속 x1~x4(버튼, 숫자키 1~4), 기본 이동 속도 0.14.
 - Current limitations / decisions: 게임 로직 없음. Canvas 2D 의사 3D와 스프라이트 캐시 방식, 외부 라이브러리 없음. 참고 스크린샷은 사용자 제공 예정.
 
 ## Verification / Deployment (when relevant)
