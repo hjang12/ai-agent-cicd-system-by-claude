@@ -14,12 +14,12 @@
     return { x: w / 2 + u * roadHalfWidth(v) * w, y: h * (C.HORIZON + (1 - C.HORIZON) * v), scale: 0.25 + 0.75 * v };
   }
   function layout(count, centerU) {
-    var cols = Math.min(Math.ceil(Math.sqrt(count * 1.6)), 11), rows = Math.ceil(count / cols);
+    var cols = Math.min(Math.ceil(Math.sqrt(count * 1.6)), 9), rows = Math.ceil(count / cols);
     var du = cols > 1 ? Math.min(0.14, 1.6 / (cols - 1)) : 0, out = [];
     for (var i = 0; i < count; i++) {
       var r = Math.floor(i / cols), c = i % cols, inRow = Math.min(cols, count - r * cols);
-      var u = centerU + (c - (inRow - 1) / 2) * du;
-      out.push({ u: clamp(u, -C.U_LIMIT, C.U_LIMIT), d: (rows - 1 - r) * Math.min(0.02, 0.15 / rows) });
+      var u = centerU + (c - (inRow - 1) / 2) * du + (r % 2 ? 0.25 : -0.25) * du;
+      out.push({ u: clamp(u, -C.U_LIMIT, C.U_LIMIT), d: (rows - 1 - r) * Math.min(0.045, 0.26 / rows) });
     }
     return out;
   }
