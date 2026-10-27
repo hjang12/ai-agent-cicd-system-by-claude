@@ -2,7 +2,7 @@
 (function () {
   var G = GameLogic, cv = document.getElementById('game'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
   var ov = document.getElementById('overlay'), ovTitle = document.getElementById('ov-title'), ovSub = document.getElementById('ov-sub'), ovBtn = document.getElementById('ov-btn');
-  var state = G.createState(), keys = {}, dragging = false, last = 0;
+  var state = G.createState(), keys = {}, dragging = false, last = 0, speed = 1, speedBtn = document.getElementById('speed');
 
   function showOverlay() {
     var s = state.status;
@@ -11,6 +11,8 @@
     if (s === 'won') { ovTitle.textContent = '승리!'; ovSub.textContent = '남은 병력 ' + state.count + '명'; ovBtn.textContent = '다시 시작'; }
     if (s === 'lost') { ovTitle.textContent = '패배'; ovSub.textContent = '병력이 모두 쓰러졌습니다.'; ovBtn.textContent = '다시 시작'; }
   }
+  function setSpeed(n) { speed = Math.max(1, Math.min(4, n)); speedBtn.textContent = 'x' + speed; }
+  speedBtn.addEventListener('click', function () { setSpeed(speed % 4 + 1); });
   function begin() { state = G.start(G.createState()); showOverlay(); }
   ovBtn.addEventListener('click', begin);
 
@@ -21,7 +23,7 @@
   cv.addEventListener('pointerdown', function (e) { dragging = true; if (state.status === 'playing') state.u = pointerU(e); });
   window.addEventListener('pointerup', function () { dragging = false; });
   cv.addEventListener('pointermove', function (e) { if (dragging && state.status === 'playing') state.u = pointerU(e); });
-  window.addEventListener('keydown', function (e) { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener('keydown', function (e) { keys[e.key.toLowerCase()] = true; if (/^[1-4]$/.test(e.key)) setSpeed(+e.key); });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
   function keyInput() { return ((keys.arrowright || keys.d) ? 1 : 0) - ((keys.arrowleft || keys.a) ? 1 : 0); }
 
@@ -82,11 +84,12 @@
 
   function frame(t) {
     var dt = Math.min(0.05, (t - last) / 1000 || 0); last = t;
-    if (state.status === 'playing') { G.step(state, dt, keyInput()); if (state.status !== 'playing') showOverlay(); }
+    if (state.status === 'playing') { G.advance(state, dt, keyInput(), speed); if (state.status !== 'playing') showOverlay(); }
     draw(); requestAnimationFrame(frame);
   }
   window.__game = {
     get state() { return state; },
+    get speed() { return speed; }, setSpeed: setSpeed,
     fastForward: function (sec, input) { for (var i = 0; i < Math.round(sec * 60) && state.status === 'playing'; i++) G.step(state, 1 / 60, input || 0); showOverlay(); draw(); }
   };
   showOverlay(); requestAnimationFrame(frame);

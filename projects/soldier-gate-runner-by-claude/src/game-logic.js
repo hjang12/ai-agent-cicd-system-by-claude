@@ -3,7 +3,7 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.GameLogic = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
-  var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.07, STOP_D: 0.3,
+  var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.14, STOP_D: 0.3,
     ENGAGE_D: 0.75, BULLET_SPEED: 1.3, FIRE_INTERVAL: 0.18, SHOOTERS_MAX: 24, START_COUNT: 12, ENEMY_DPS: 0.8 };
 
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
@@ -85,6 +85,12 @@
     else if (s.count <= 0) s.status = 'lost';
     return s;
   }
-  return { C: C, roadHalfWidth: roadHalfWidth, toScreen: toScreen, layout: layout, applyGate: applyGate, gateValue: gateValue,
+  // Advance by dt * speed in fixed sub-steps (<= 1/60 s) so collisions stay accurate at x2..x4.
+  function advance(s, dt, input, speed) {
+    var left = dt * (speed || 1);
+    while (left > 1e-9 && s.status === 'playing') { var h = Math.min(left, 1 / 60); step(s, h, input); left -= h; }
+    return s;
+  }
+  return { C: C, advance: advance, roadHalfWidth: roadHalfWidth, toScreen: toScreen, layout: layout, applyGate: applyGate, gateValue: gateValue,
     createState: createState, start: start, step: step };
 });

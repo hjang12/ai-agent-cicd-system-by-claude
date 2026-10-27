@@ -58,6 +58,15 @@ def main(screenshot=None):
         assert status() == "lost", status()
         assert "패배" in page.locator("#ov-title").inner_text()
 
+        # speed button cycles x1 -> x2 -> x3 -> x4 -> x1 and number keys select directly
+        labels = [page.locator("#speed").inner_text()]
+        for _ in range(4):
+            page.click("#speed"); labels.append(page.locator("#speed").inner_text())
+        assert labels == ["x1", "x2", "x3", "x4", "x1"], labels
+        page.keyboard.press("3")
+        assert page.evaluate("window.__game.speed") == 3 and page.locator("#speed").inner_text() == "x3"
+        page.keyboard.press("1")
+
         # keyboard + drag input
         page.click("#ov-btn")
         page.keyboard.down("ArrowRight"); page.wait_for_timeout(300); page.keyboard.up("ArrowRight")
