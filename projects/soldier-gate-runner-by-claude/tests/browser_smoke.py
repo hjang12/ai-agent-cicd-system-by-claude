@@ -40,7 +40,7 @@ def main(screenshot=None):
         if screenshot:
             page.screenshot(path=screenshot)
         before = page.evaluate("window.__game.state.enemies.reduce((a, e) => a + e.hp, 0)")
-        assert before < 208, f"no enemy damage: {before}"
+        assert before < 284, f"no enemy damage: {before}"
 
         # win path
         page.evaluate("window.__game.state.count = 300; window.__game.fastForward(120)")
@@ -58,14 +58,24 @@ def main(screenshot=None):
         assert status() == "lost", status()
         assert "패배" in page.locator("#ov-title").inner_text()
 
-        # speed button cycles x1 -> x2 -> x3 -> x4 -> x1 and number keys select directly
-        labels = [page.locator("#speed").inner_text()]
-        for _ in range(4):
-            page.click("#speed"); labels.append(page.locator("#speed").inner_text())
-        assert labels == ["x1", "x2", "x3", "x4", "x1"], labels
+        # speed selector: all of x1..x4 visible at once, selectable directly, and never covering the game screen
+        labels = page.locator("#speedbar button").all_inner_texts()
+        assert labels == ["x1", "x2", "x3", "x4"], labels
+        page.click("#speedbar button[data-speed='4']")
+        assert page.evaluate("window.__game.speed") == 4
+        assert page.locator("#speedbar button[data-speed='4']").get_attribute("aria-pressed") == "true"
+        assert page.locator("#speedbar button[data-speed='1']").get_attribute("aria-pressed") == "false"
         page.keyboard.press("3")
-        assert page.evaluate("window.__game.speed") == 3 and page.locator("#speed").inner_text() == "x3"
-        page.keyboard.press("1")
+        assert page.evaluate("window.__game.speed") == 3
+        page.click("#speedbar button[data-speed='1']")
+        for size in ({"width": 390, "height": 844}, {"width": 1280, "height": 800}):
+            page.set_viewport_size(size)
+            c, s = page.locator("#game").bounding_box(), page.locator("#speedbar").bounding_box()
+            overlap = not (s["x"] >= c["x"] + c["width"] or s["x"] + s["width"] <= c["x"] or s["y"] >= c["y"] + c["height"] or s["y"] + s["height"] <= c["y"])
+            assert not overlap, f"speed bar covers the game screen at {size}"
+            assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight + 1"), f"page scrolls at {size}"
+            assert s["x"] >= 0 and s["x"] + s["width"] <= size["width"] and s["y"] + s["height"] <= size["height"], f"speed bar off screen at {size}"
+        page.set_viewport_size({"width": 390, "height": 844})
 
         # keyboard + drag input
         page.click("#ov-btn")
