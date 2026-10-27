@@ -162,3 +162,53 @@ test('riding the tank protects the squad and the tank shells do heavy damage', (
   for (let i = 0; i < 60 * 3; i++) G.step(s, 1 / 60, 0);
   assert.strictEqual(s.count, c0); assert.ok(e.hp < 200); assert.ok(s.bullets.every((b) => Math.abs(b.u) <= 1));
 });
+
+test('percentage gate changes the squad by a ratio', () => {
+  assert.strictEqual(G.applyGate({ type: 'pct', value: 50 }, 10), 15);
+  assert.strictEqual(G.applyGate({ type: 'pct', value: -30 }, 10), 7);
+  assert.strictEqual(G.applyGate({ type: 'pct', value: -100 }, 10), 0);
+});
+
+function fires(s, seconds) { let n = 0, prev = s.cool; for (let i = 0; i < seconds * 60; i++) { G.step(s, 1 / 60, 0); if (s.cool > prev + 1e-9) n++; prev = s.cool; } return n; }
+function arena(power) {
+  const s = G.start(G.createState()); s.gates = []; s.count = 30; s.u = 0; s.power = power;
+  s.enemies = [{ id: 'e', hp: 99999, max: 99999, u: 0, d: 0.6, boss: false }]; return s;
+}
+
+test('power gate grants its power on contact', () => {
+  for (const kind of ['rapid', 'heavy', 'shield']) {
+    const g = { type: 'power', kind, u: 0, d: 0.5, half: 0.4 }, s = G.start(G.createState());
+    s.gates = [g]; s.enemies = [{ id: 'far', hp: 999, max: 999, u: 0, d: 10, boss: false }]; s.count = 20;
+    for (let i = 0; i < 3000 && !g.done; i++) G.step(s, 1 / 60, 0);
+    assert.ok(s.power && s.power.kind === kind && s.count === 20, kind);
+  }
+});
+
+test('rapid fire doubles the firing rate, heavy doubles bullet damage, shield blocks enemy fire', () => {
+  const base = fires(arena(null), 3), rapid = fires(arena({ kind: 'rapid', t: 8 }), 3);
+  assert.ok(rapid >= base * 1.6 && rapid <= base * 2.2, `base ${base}, rapid ${rapid}`);
+  const h = arena({ kind: 'heavy', t: 8 }); h.count = 24; const n = arena(null); n.count = 24;
+  G.step(h, 1 / 60, 0); G.step(n, 1 / 60, 0);
+  assert.strictEqual(h.bullets[0].w, 2 * n.bullets[0].w);
+  const sh = arena({ kind: 'shield', t: 8 }); sh.enemies[0].d = 0.3; const c0 = sh.count;
+  for (let i = 0; i < 180; i++) G.step(sh, 1 / 60, 0); assert.strictEqual(sh.count, c0);
+  const un = arena(null); un.enemies[0].d = 0.3; for (let i = 0; i < 180; i++) G.step(un, 1 / 60, 0); assert.ok(un.count < 30);
+});
+
+test('crate rewards: soldiers are added instantly, rapid grants the power', () => {
+  for (const [reward, extra] of [['soldiers', { amount: 25 }], ['rapid', {}]]) {
+    const g = Object.assign({ type: 'crate', reward, need: 200, hits: 0, u: 0, d: 1.0, half: 0.35 }, extra);
+    const s = G.start(G.createState()); s.gates = [g]; s.enemies = [{ id: 'far', hp: 999, max: 999, u: 0, d: 10, boss: false }]; s.count = 60;
+    for (let i = 0; i < 3000 && !g.broken; i++) G.step(s, 1 / 60, 0);
+    assert.ok(g.broken, reward);
+    if (reward === 'soldiers') assert.strictEqual(s.count, 85); else assert.strictEqual(s.power.kind, 'rapid');
+  }
+});
+
+test('the default level uses every gate type and each gate has valid fields', () => {
+  const lv = G.createState(), types = new Set(lv.gates.map((g) => g.type));
+  ['add', 'sub', 'mul', 'pct', 'power', 'shoot', 'shootmul', 'shootsub', 'crate'].forEach((k) => assert.ok(types.has(k), k));
+  lv.gates.forEach((g) => { assert.ok(g.half > 0 && g.d > 0 && Math.abs(g.u) <= 1); if (g.type === 'power') assert.ok(['rapid', 'heavy', 'shield'].includes(g.kind)); });
+  const w = G.start(G.createState()); w.count = 300; for (let i = 0; i < 60 * 300 && w.status === 'playing'; i++) G.step(w, 1 / 60, 0);
+  assert.strictEqual(w.status, 'won');
+});
