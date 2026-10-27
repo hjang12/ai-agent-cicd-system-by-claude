@@ -82,16 +82,24 @@
         var g = it.o;
         if (g.type === 'crate') {
           var cp = G.toScreen(g.u, g.d, W, H); crate(cp.x, cp.y, cp.scale, g.hits / g.need);
-          label('TANK 통', cp.x, cp.y - 62 * cp.scale, Math.max(11, 16 * cp.scale), '#ffe27a');
+          label({ tank: 'TANK 통', soldiers: '병사 통 +' + g.amount, rapid: '연사 통' }[g.reward || 'tank'], cp.x, cp.y - 62 * cp.scale, Math.max(11, 16 * cp.scale), '#ffe27a');
           label(String(G.gateValue(g)), cp.x, cp.y - 20 * cp.scale, Math.max(12, 24 * cp.scale), '#fff');
         } else {
           var l = G.toScreen(g.u - g.half, g.d, W, H), r = G.toScreen(g.u + g.half, g.d, W, H), h = 60 * l.scale;
           var col = { add: 'rgba(60,130,230,0.85)', mul: 'rgba(60,130,230,0.85)', sub: 'rgba(220,70,60,0.85)', div: 'rgba(220,70,60,0.85)',
             shoot: 'rgba(240,170,40,0.9)', shootmul: 'rgba(160,90,220,0.9)', shootsub: 'rgba(230,110,60,0.9)' }[g.type];
+          if (g.type === 'pct') col = g.value > 0 ? 'rgba(60,130,230,0.85)' : 'rgba(220,70,60,0.85)';
+          if (g.type === 'power') col = 'rgba(40,170,150,0.9)';
           ctx.fillStyle = col; ctx.fillRect(l.x, l.y - h, r.x - l.x, h);
           if (G.isShootable(g)) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(l.x + 1, l.y - h + 1, r.x - l.x - 2, h - 2); }
-          var sym = { add: '+', sub: '-', mul: '×', div: '÷', shoot: '◎ +', shootmul: '◎ ×', shootsub: '◎ -' }[g.type], full = !G.isOpen(g) && G.isShootable(g);
-          label(sym + G.gateValue(g) + (full ? ' MAX' : ''), (l.x + r.x) / 2, l.y - h * 0.3, Math.max(12, 28 * l.scale));
+          var txt;
+          if (g.type === 'pct') txt = (g.value > 0 ? '+' : '') + g.value + '%';
+          else if (g.type === 'power') txt = { rapid: '연사 UP', heavy: '화력 UP', shield: '보호막' }[g.kind];
+          else {
+            var sym = { add: '+', sub: '-', mul: '×', div: '÷', shoot: '◎ +', shootmul: '◎ ×', shootsub: '◎ -' }[g.type];
+            txt = sym + G.gateValue(g) + (!G.isOpen(g) && G.isShootable(g) ? ' MAX' : '');
+          }
+          label(txt, (l.x + r.x) / 2, l.y - h * 0.3, Math.max(12, 28 * l.scale));
         }
       } else {
         var e = it.o, p = G.toScreen(e.u, e.d, W, H), n = e.boss ? 1 : Math.max(1, Math.ceil(e.hp / e.max * 6));
@@ -100,14 +108,19 @@
       }
     });
     ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 2;
-    s.bullets.forEach(function (bl) { var p = G.toScreen(bl.u, bl.d, W, H); ctx.strokeStyle = bl.big ? '#ff8a2a' : '#ffd84a'; ctx.lineWidth = bl.big ? 6 * p.scale + 1 : 2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y + (bl.big ? 16 : 7) * p.scale); ctx.stroke(); });
+    s.bullets.forEach(function (bl) { var p = G.toScreen(bl.u, bl.d, W, H); ctx.strokeStyle = bl.big ? '#ff8a2a' : bl.heavy ? '#ff6a3a' : '#ffd84a'; ctx.lineWidth = bl.big ? 6 * p.scale + 1 : bl.heavy ? 3.5 : 2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y + (bl.big ? 16 : 7) * p.scale); ctx.stroke(); });
     G.layout(s.count, s.u).map(function (p) { var q = G.toScreen(p.u, p.d, W, H); q.d = p.d; return q; }).sort(function (p, q) { return q.d - p.d; })
       .forEach(function (q) { soldier(q.x, q.y, q.scale * 1.0 * Math.max(0.55, 1 - s.count / 600), 'ally', s.t * 12 + q.x * 0.35); });
-    if (s.power) { var tp = G.toScreen(s.u, G.frontD(s.count) + 0.05, W, H); tank(tp.x, tp.y, tp.scale * 2.4); }
+    if (s.power && s.power.kind === 'tank') { var tp = G.toScreen(s.u, G.frontD(s.count) + 0.05, W, H); tank(tp.x, tp.y, tp.scale * 2.4); }
+    if (s.power && s.power.kind === 'shield') {
+      var sp = G.toScreen(s.u, G.frontD(s.count) / 2, W, H), rx = Math.max(60, 14 * Math.sqrt(s.count)) + 30;
+      ctx.fillStyle = 'rgba(90,170,255,0.18)'; ctx.strokeStyle = 'rgba(160,215,255,0.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(sp.x, sp.y - 34, rx, 60 + G.frontD(s.count) * 160, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, 44);
     label('병력 ' + s.count, 52, 29, 18); var boss = s.enemies.filter(function (e) { return e.boss; })[0];
     if (boss) { ctx.fillStyle = '#400'; ctx.fillRect(170, 14, W - 190, 14); ctx.fillStyle = '#e33'; ctx.fillRect(170, 14, (W - 190) * Math.max(0, boss.hp) / boss.max, 14); label('BOSS', 148, 27, 12); }
-    if (s.power) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(8, 50, 150, 16); ctx.fillStyle = '#4fa85c'; ctx.fillRect(8, 50, 150 * s.power.t / G.C.TANK_TIME, 16); label('TANK ' + s.power.t.toFixed(1) + 's', 83, 63, 12); }
+    if (s.power) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(8, 50, 150, 16); ctx.fillStyle = '#4fa85c'; ctx.fillRect(8, 50, 150 * s.power.t / G.C.TANK_TIME, 16); label({ tank: 'TANK', shield: '보호막', rapid: '연사', heavy: '화력' }[s.power.kind] + ' ' + s.power.t.toFixed(1) + 's', 83, 63, 12); }
   }
 
   function frame(t) {

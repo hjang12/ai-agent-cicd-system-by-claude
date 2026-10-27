@@ -5,7 +5,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.14, STOP_D: 0.3,
     FIRE_RANGE: 1.0, ENEMY_RANGE: 0.75, BULLET_SPEED: 1.3, FIRE_INTERVAL: 0.18, SHOOTERS_MAX: 24, START_COUNT: 12, ENEMY_DPS: 0.8,
-    TANK_TIME: 8, TANK_SHELL_W: 12, TANK_INTERVAL: 0.35, CRATE_PENALTY: 8, MUL_STEP: 25, MUL_MAX: 5 };
+    TANK_TIME: 8, POWER_TIME: 8, TANK_SHELL_W: 12, TANK_INTERVAL: 0.35, CRATE_PENALTY: 8, MUL_STEP: 25, MUL_MAX: 5 };
 
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   function roadHalfWidth(v) { return C.TOP_HALF + (C.BOTTOM_HALF - C.TOP_HALF) * v; }
@@ -46,11 +46,13 @@
     if (g.type === 'crate') return Math.max(0, g.need - g.hits);
     return g.value;
   }
+  function grantPower(s, kind) { s.power = { kind: kind, t: kind === 'tank' ? C.TANK_TIME : C.POWER_TIME }; }
   function applyGate(g, count) {
     if (g.type === 'add') return count + g.value;
     if (g.type === 'sub') return Math.max(0, count - g.value);
     if (g.type === 'mul') return Math.floor(count * g.value);
     if (g.type === 'div') return Math.max(1, Math.floor(count / g.value));
+    if (g.type === 'pct') return Math.max(0, Math.round(count * (1 + g.value / 100)));
     if (g.type === 'shoot') return count + g.base + g.hits;
     if (g.type === 'shootmul') return Math.floor(count * mulOf(g));
     if (g.type === 'shootsub') return Math.max(0, count - (g.base - g.hits));
@@ -63,7 +65,11 @@
     else if (g.type === 'shootsub') g.hits = Math.min(g.base, g.hits + w);
     else if (g.type === 'crate') {
       g.hits = Math.min(g.need, g.hits + w);
-      if (g.hits >= g.need && !g.broken) { g.broken = true; g.done = true; s.power = { kind: 'tank', t: C.TANK_TIME }; }
+      if (g.hits >= g.need && !g.broken) {
+        g.broken = true; g.done = true;
+        var reward = g.reward || 'tank';
+        if (reward === 'soldiers') s.count += g.amount; else grantPower(s, reward);
+      }
     }
   }
 
@@ -73,12 +79,14 @@
       gates: [
         { type: 'add', value: 10, u: -0.5, d: 0.9, half: 0.45 }, { type: 'mul', value: 2, u: 0.5, d: 0.9, half: 0.45 },
         { type: 'shoot', base: 1, hits: 0, max: 30, u: 0, d: 1.35, half: 0.4 },
-        { type: 'crate', need: 500, hits: 0, u: 0, d: 2.4, half: 0.35 },
-        { type: 'sub', value: 6, u: -0.5, d: 2.9, half: 0.45 }, { type: 'add', value: 15, u: 0.5, d: 2.9, half: 0.45 },
+        { type: 'crate', reward: 'tank', need: 500, hits: 0, u: 0, d: 2.4, half: 0.35 },
+        { type: 'pct', value: 40, u: -0.5, d: 2.9, half: 0.45 }, { type: 'power', kind: 'rapid', u: 0.5, d: 2.9, half: 0.45 },
         { type: 'shootmul', hits: 0, max: (C.MUL_MAX - 1) * C.MUL_STEP, u: 0, d: 3.4, half: 0.4 },
-        { type: 'shootsub', base: 25, hits: 0, u: 0, d: 4.4, half: 0.4 }],
+        { type: 'crate', reward: 'soldiers', amount: 25, need: 200, hits: 0, u: -0.5, d: 4.4, half: 0.3 },
+        { type: 'shootsub', base: 25, hits: 0, u: 0.5, d: 4.4, half: 0.4 },
+        { type: 'sub', value: 8, u: -0.5, d: 4.9, half: 0.45 }, { type: 'pct', value: -20, u: 0.5, d: 4.9, half: 0.45 }],
       enemies: [{ id: 'e1', hp: 24, max: 24, u: -0.3, d: 1.9, boss: false }, { id: 'e2', hp: 40, max: 40, u: 0.35, d: 3.9, boss: false },
-        { id: 'boss', hp: 220, max: 220, u: 0, d: 5.0, boss: true }] };
+        { id: 'boss', hp: 220, max: 220, u: 0, d: 5.6, boss: true }] };
   }
   function start(s) { s.status = 'playing'; return s; }
 
@@ -89,10 +97,10 @@
     return best;
   }
   function fire(s, tgt) {
-    var pos = layout(s.count, s.u), n = Math.min(s.count, C.SHOOTERS_MAX), weight = Math.ceil(s.count / n);
+    var pos = layout(s.count, s.u), n = Math.min(s.count, C.SHOOTERS_MAX), heavy = !!(s.power && s.power.kind === 'heavy'), weight = Math.ceil(s.count / n) * (heavy ? 2 : 1);
     for (var k = 0; k < n; k++) {
       var p = pos[Math.floor((k + 0.5) * s.count / n)];
-      s.bullets.push({ u0: p.u, u: p.u, d0: p.d, d: p.d, w: weight, ref: tgt.ref, kind: tgt.kind, big: false });
+      s.bullets.push({ u0: p.u, u: p.u, d0: p.d, d: p.d, w: weight, ref: tgt.ref, kind: tgt.kind, big: false, heavy: heavy });
     }
   }
   function fireTank(s, tgt) {
@@ -111,11 +119,11 @@
     s.enemies.forEach(function (e) { e.d -= scroll; });
     var fd = frontD(s.count);
     s.gates.forEach(function (g) {
-      if (!g.done && g.d <= fd) { g.done = true; if (Math.abs(s.u - g.u) <= g.half) s.count = applyGate(g, s.count); }
+      if (!g.done && g.d <= fd) { g.done = true; if (Math.abs(s.u - g.u) <= g.half) { if (g.type === 'power') grantPower(s, g.kind); else s.count = applyGate(g, s.count); } }
     });
     var tgt = target(s); s.cool -= dt; s.tcool -= dt;
-    if (tgt && s.cool <= 0) { fire(s, tgt); s.cool = C.FIRE_INTERVAL; }
-    if (tgt && s.power && s.tcool <= 0) { fireTank(s, tgt); s.tcool = C.TANK_INTERVAL; }
+    if (tgt && s.cool <= 0) { fire(s, tgt); s.cool = C.FIRE_INTERVAL * (s.power && s.power.kind === 'rapid' ? 0.5 : 1); }
+    if (tgt && s.power && s.power.kind === 'tank' && s.tcool <= 0) { fireTank(s, tgt); s.tcool = C.TANK_INTERVAL; }
     s.bullets = s.bullets.filter(function (b) {
       b.d += C.BULLET_SPEED * dt;
       b.u = b.u0 + (b.ref.u - b.u0) * clamp((b.d - b.d0) / Math.max(b.ref.d - b.d0, 0.05), 0, 1);
@@ -127,7 +135,7 @@
       return b.d <= 1.05 && b.d >= -0.05;
     });
     var engaged = s.enemies.filter(function (e) { return e.hp > 0 && e.d <= C.ENEMY_RANGE; }).length;
-    if (!s.power) s.hurt += engaged * C.ENEMY_DPS * dt; // riding the tank protects the squad
+    if (!(s.power && (s.power.kind === 'tank' || s.power.kind === 'shield'))) s.hurt += engaged * C.ENEMY_DPS * dt; // tank and shield protect the squad
     while (s.hurt >= 1) { s.hurt -= 1; s.count = Math.max(0, s.count - 1); }
     if (s.enemies.every(function (e) { return e.hp <= 0; })) { s.status = 'won'; s.power = null; }
     else if (s.count <= 0) { s.status = 'lost'; s.power = null; }
