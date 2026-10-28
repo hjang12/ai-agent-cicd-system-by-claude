@@ -292,3 +292,14 @@ test('the default round is winnable from 12 soldiers by moving to face the enemi
   const b = G.start(G.createState()); for (let i = 0; i < 60 * 300 && b.status === 'playing'; i++) G.step(b, 1 / 60, b.u < 0.5 ? 1 : 0);
   assert.strictEqual(b.status, 'lost');
 });
+
+test('every object type approaches with the same look: same foot speed and same growth rate', () => {
+  const W = 360, H = 640, ratio = (f, a, b) => f(b) / f(a);
+  const bannerW = (d) => { const l = G.toScreen(-0.95, d, W, H), r = G.toScreen(-0.05, d, W, H); return r.x - l.x; };
+  const bannerH = (d) => 60 * G.toScreen(0, d, W, H).scale, sprite = (d) => G.toScreen(0, d, W, H).scale, foot = (d) => G.toScreen(0, d, W, H).y;
+  for (const [a, b] of [[0.9, 0.5], [0.8, 0.4], [0.6, 0.2]]) {
+    const w = ratio(bannerW, a, b), h = ratio(bannerH, a, b), s = ratio(sprite, a, b);
+    assert.ok(Math.abs(w - s) < 1e-9 && Math.abs(h - s) < 1e-9, `growth differs at ${a}->${b}: banner ${w}, ${h}, sprite ${s}`);
+  }
+  assert.ok(Math.abs((foot(0.5) - foot(0.9)) - (foot(0.1) - foot(0.5)) * (0.4 / 0.4)) < 1e-9, 'foot speed is not constant in d');
+});
