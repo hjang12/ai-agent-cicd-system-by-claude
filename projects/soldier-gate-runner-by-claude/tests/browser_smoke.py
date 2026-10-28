@@ -85,6 +85,23 @@ def main(screenshot=None):
         page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.8)
         page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.25, box["y"] + box["height"] * 0.8); page.mouse.up()
         assert page.evaluate("window.__game.state.u") < 0, "drag input ignored"
+        # landscape phones: fits one screen, controls beside the game, and input maps to the centred playfield
+        page.click("#ov-btn") if page.locator("#overlay").is_visible() else None
+        for size in ({"width": 844, "height": 390}, {"width": 667, "height": 375}):
+            page.set_viewport_size(size); page.wait_for_timeout(120)
+            c, s = page.locator("#game").bounding_box(), page.locator("#speedbar").bounding_box()
+            assert c["width"] > c["height"], f"canvas is not landscape at {size}"
+            assert page.evaluate("document.documentElement.scrollHeight <= window.innerHeight + 1 && document.documentElement.scrollWidth <= window.innerWidth + 1"), f"page scrolls at {size}"
+            assert s["x"] >= c["x"] + c["width"] - 1, f"speed bar not beside the game at {size}"
+            assert s["x"] + s["width"] <= size["width"] and s["y"] >= 0 and s["y"] + s["height"] <= size["height"], f"speed bar off screen at {size}"
+            assert page.locator("#title").is_hidden(), "title should be hidden in landscape"
+            field = c["height"] * 360 / 640
+            cx, cy = c["x"] + c["width"] / 2, c["y"] + c["height"] * 0.8
+            page.mouse.move(cx, cy); page.mouse.down(); page.mouse.move(cx + 1, cy); page.mouse.up()
+            assert abs(page.evaluate("window.__game.state.u")) < 0.06, "centre of the playfield should map to u=0"
+            page.mouse.move(cx + field * 0.3, cy); page.mouse.down(); page.mouse.move(cx + field * 0.3 + 1, cy); page.mouse.up()
+            assert page.evaluate("window.__game.state.u") > 0.3, "pointer right of centre should move the squad right"
+            if screenshot: page.screenshot(path=screenshot.replace(".png", f"_land{size['width']}.png"))
         browser.close()
     server.shutdown()
     assert not errors, f"console errors: {errors}"

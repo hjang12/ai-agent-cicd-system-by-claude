@@ -1,8 +1,19 @@
 /* Canvas rendering, input, screens and the main loop. Game rules live in game-logic.js. */
 (function () {
-  var G = GameLogic, cv = document.getElementById('game'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+  var G = GameLogic, cv = document.getElementById('game'), ctx = cv.getContext('2d'), W = 360, H = 640; // W x H is the playfield; in landscape the canvas is wider and the playfield stays centred
   var ov = document.getElementById('overlay'), ovTitle = document.getElementById('ov-title'), ovSub = document.getElementById('ov-sub'), ovBtn = document.getElementById('ov-btn');
   var state = G.createState(), keys = {}, dragging = false, last = 0, speed = 1, speedBtns = document.querySelectorAll('#speedbar button');
+
+  var landscapeMQ = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+  function fit() {
+    var fw = W;
+    if (landscapeMQ.matches) {
+      var availH = Math.max(120, window.innerHeight - 16), availW = Math.max(200, window.innerWidth - 110);
+      fw = Math.max(W, Math.min(1280, Math.round(H * availW / availH)));
+    }
+    if (cv.width !== fw) cv.width = fw;
+  }
+  window.addEventListener('resize', fit); window.addEventListener('orientationchange', fit); fit();
 
   function showOverlay() {
     var s = state.status;
@@ -18,7 +29,7 @@
   ovBtn.addEventListener('click', begin);
 
   function pointerU(e) {
-    var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W;
+    var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * cv.width - (cv.width - W) / 2;
     return Math.max(-0.85, Math.min(0.85, (x - W / 2) / (G.roadHalfWidth(1) * W)));
   }
   cv.addEventListener('pointerdown', function (e) { dragging = true; if (state.status === 'playing') state.u = pointerU(e); });
@@ -65,11 +76,24 @@
     rr(x - r, y - r * 1.7, r * 2, r * 0.22, 0, '#5e3d16'); rr(x - r, y - r * 0.6, r * 2, r * 0.22, 0, '#5e3d16');
     ctx.fillStyle = '#e8c84a'; ctx.fillRect(x - r, y - r * 2.55, r * 2 * (1 - hitsRatio), r * 0.25);
   }
+  // Floor mat showing exactly which lane an object occupies.
+  function laneMat(o, color) {
+    if (!o.lane) return;
+    var u0 = o.lane === 'L' ? -1 : 0.04, u1 = o.lane === 'L' ? -0.04 : 1, a = G.toScreen(u0, o.d, W, H), b = G.toScreen(u1, o.d, W, H);
+    ctx.fillStyle = color; ctx.fillRect(a.x, a.y - 7 * a.scale, b.x - a.x, 9 * a.scale);
+  }
+  // Draws text that is shrunk to fit inside maxW (used for gate banners).
+  function labelFit(text, x, y, size, maxW) {
+    ctx.font = 'bold ' + size + 'px system-ui, sans-serif';
+    var w = ctx.measureText(text).width, s = w > maxW ? size * maxW / w : size;
+    label(text, x, y, Math.max(8, s));
+  }
   function label(t, x, y, size, color) { ctx.font = 'bold ' + size + 'px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = color || '#fff'; ctx.fillText(t, x, y); }
 
   function draw() {
     var s = state, hz = H * G.C.HORIZON, i;
-    ctx.fillStyle = '#7ec8ff'; ctx.fillRect(0, 0, W, hz); ctx.fillStyle = '#5fae4a'; ctx.fillRect(0, hz, W, H - hz);
+    var FW = cv.width; ctx.fillStyle = '#7ec8ff'; ctx.fillRect(0, 0, FW, hz); ctx.fillStyle = '#5fae4a'; ctx.fillRect(0, hz, FW, H - hz);
+    ctx.save(); ctx.translate((FW - W) / 2, 0);
     var a = G.toScreen(-1, 1, W, H), b = G.toScreen(1, 1, W, H), c = G.toScreen(1, 0, W, H), d = G.toScreen(-1, 0, W, H);
     ctx.fillStyle = '#6b6f76'; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([10, 14]); ctx.beginPath(); var m1 = G.toScreen(0, 1, W, H), m0 = G.toScreen(0, 0, W, H); ctx.moveTo(m1.x, m1.y); ctx.lineTo(m0.x, m0.y); ctx.stroke(); ctx.setLineDash([]);
@@ -81,11 +105,11 @@
       if (it.k === 'g') {
         var g = it.o;
         if (g.type === 'crate') {
-          var cp = G.toScreen(g.u, g.d, W, H); crate(cp.x, cp.y, cp.scale, g.hits / g.need);
+          var cp = G.toScreen(g.u, g.d, W, H); laneMat(g, 'rgba(232,200,74,0.30)'); crate(cp.x, cp.y, cp.scale, g.hits / g.need);
           label({ tank: 'TANK 통', soldiers: '병사 통 +' + g.amount, rapid: '연사 통' }[g.reward || 'tank'], cp.x, cp.y - 62 * cp.scale, Math.max(11, 16 * cp.scale), '#ffe27a');
           label(String(G.gateValue(g)), cp.x, cp.y - 20 * cp.scale, Math.max(12, 24 * cp.scale), '#fff');
         } else {
-          var l = G.toScreen(g.u - g.half, g.d, W, H), r = G.toScreen(g.u + g.half, g.d, W, H), h = 60 * l.scale;
+          var hw = g.lane ? g.half * 0.96 : g.half, l = G.toScreen(g.u - hw, g.d, W, H), r = G.toScreen(g.u + hw, g.d, W, H), h = 60 * l.scale;
           var col = { add: 'rgba(60,130,230,0.85)', mul: 'rgba(60,130,230,0.85)', sub: 'rgba(220,70,60,0.85)', div: 'rgba(220,70,60,0.85)',
             shoot: 'rgba(240,170,40,0.9)', shootmul: 'rgba(160,90,220,0.9)', shootsub: 'rgba(230,110,60,0.9)' }[g.type];
           if (g.type === 'pct') col = g.value > 0 ? 'rgba(60,130,230,0.85)' : 'rgba(220,70,60,0.85)';
@@ -99,10 +123,10 @@
             var sym = { add: '+', sub: '-', mul: '×', div: '÷', shoot: '◎ +', shootmul: '◎ ×', shootsub: '◎ -' }[g.type];
             txt = sym + G.gateValue(g) + (!G.isOpen(g) && G.isShootable(g) ? ' MAX' : '');
           }
-          label(txt, (l.x + r.x) / 2, l.y - h * 0.3, Math.max(12, 28 * l.scale));
+          labelFit(txt, (l.x + r.x) / 2, l.y - h * 0.3, Math.max(12, 28 * l.scale), (r.x - l.x) - 8);
         }
       } else {
-        var e = it.o, p = G.toScreen(e.u, e.d, W, H), n = e.boss ? 1 : Math.max(1, Math.ceil(e.hp / e.max * 6));
+        var e = it.o; laneMat(e, 'rgba(220,60,50,0.28)'); var p = G.toScreen(e.u, e.d, W, H), n = e.boss ? 1 : Math.max(1, Math.ceil(e.hp / e.max * 6));
         if (e.boss) { soldier(p.x, p.y, p.scale * 3.2, 'enemy', s.t * 4); } else for (i = 0; i < n; i++) soldier(p.x + (i % 3 - 1) * 26 * p.scale, p.y - Math.floor(i / 3) * 10 * p.scale, p.scale * 1.1, 'enemy', s.t * 6 + i);
         label(String(Math.ceil(e.hp)), p.x, p.y - (e.boss ? 150 : 64) * p.scale, Math.max(11, 18 * p.scale), '#fff');
       }
@@ -121,6 +145,7 @@
     label('병력 ' + s.count, 52, 29, 18); var boss = s.enemies.filter(function (e) { return e.boss; })[0];
     if (boss) { ctx.fillStyle = '#400'; ctx.fillRect(170, 14, W - 190, 14); ctx.fillStyle = '#e33'; ctx.fillRect(170, 14, (W - 190) * Math.max(0, boss.hp) / boss.max, 14); label('BOSS', 148, 27, 12); }
     if (s.power) { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(8, 50, 150, 16); ctx.fillStyle = '#4fa85c'; ctx.fillRect(8, 50, 150 * s.power.t / G.C.TANK_TIME, 16); label({ tank: 'TANK', shield: '보호막', rapid: '연사', heavy: '화력' }[s.power.kind] + ' ' + s.power.t.toFixed(1) + 's', 83, 63, 12); }
+    ctx.restore();
   }
 
   function frame(t) {

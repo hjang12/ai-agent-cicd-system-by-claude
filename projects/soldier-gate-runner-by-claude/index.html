@@ -20,6 +20,15 @@
     #ov-btn { font-size: 1.1rem; padding: 10px 28px; border: 0; border-radius: 8px; background: #2f6fd0; color: #fff; cursor: pointer; }
     h1 { margin: 0; font-size: 1.25rem; }
     p { margin: 0; font-size: 0.85rem; opacity: 0.75; }
+    @media (orientation: landscape) and (max-height: 600px) {
+      body { box-sizing: border-box; padding: 8px; gap: 0; }
+      h1, #status { display: none; }
+      #layout { flex-direction: row; align-items: center; gap: 10px; }
+      #stage { width: auto; }
+      canvas { width: auto; height: calc(100vh - 16px); aspect-ratio: auto; }
+      #speedbar { flex-direction: column; gap: 6px; }
+      #speedbar button { min-width: 48px; padding: 6px 8px; font-size: 0.9rem; }
+    }
   </style>
 </head>
 <body>
@@ -27,7 +36,7 @@
   <div id="layout"><div id="stage"><canvas id="game" width="360" height="640" aria-label="게임 화면"></canvas>
     <div id="overlay"><h2 id="ov-title"></h2><p id="ov-sub"></p><button id="ov-btn" type="button">시작</button></div></div>
     <div id="speedbar" role="group" aria-label="게임 속도"><button type="button" data-speed="1">x1</button><button type="button" data-speed="2">x2</button><button type="button" data-speed="3">x3</button><button type="button" data-speed="4">x4</button></div></div>
-  <p id="status" data-version="0.5.1-m2">M2 — 병사 비주얼, 배속 x1~x4, 다양한 관문·통·탱크</p>
+  <p id="status" data-version="0.6.0-m2">M2 — 병사 비주얼, 배속 x1~x4, 다양한 관문·통·탱크</p>
   <script src="src/game-logic.js"></script>
   <script src="src/game.js"></script>
 </body>
