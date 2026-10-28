@@ -11,7 +11,8 @@
   function roadHalfWidth(v) { return C.TOP_HALF + (C.BOTTOM_HALF - C.TOP_HALF) * v; }
   function toScreen(u, d, w, h) {
     var v = 1 - clamp(d, 0, 1);
-    return { x: w / 2 + u * roadHalfWidth(v) * w, y: h * (C.HORIZON + (1 - C.HORIZON) * v), scale: 0.25 + 0.75 * v };
+    // One perspective law for everything: object scale follows the road width, so banners, enemies, crates, the tank and the boss all grow at the same rate.
+    return { x: w / 2 + u * roadHalfWidth(v) * w, y: h * (C.HORIZON + (1 - C.HORIZON) * v), scale: roadHalfWidth(v) / roadHalfWidth(1) };
   }
   function dims(count) {
     var cols = Math.min(Math.ceil(Math.sqrt(count * 1.6)), 9), rows = Math.max(1, Math.ceil(count / cols));
