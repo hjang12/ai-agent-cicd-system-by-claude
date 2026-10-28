@@ -30,6 +30,12 @@
     return out;
   }
 
+  // Lanes: the road has a left lane (u < 0) and a right lane (u >= 0). Lane objects fill exactly one lane; only the boss sits in the centre.
+  function covers(o, u) {
+    if (o.lane === 'L') return u < 0;
+    if (o.lane === 'R') return u >= 0;
+    return Math.abs(u - o.u) < (o.w || o.half || 0.14);
+  }
   function isShootable(g) { return g.type === 'shoot' || g.type === 'shootmul' || g.type === 'shootsub' || g.type === 'crate'; }
   function mulOf(g) { return Math.min(C.MUL_MAX, 1 + Math.floor(g.hits / C.MUL_STEP)); }
   function isOpen(g) {
@@ -78,15 +84,15 @@
     // Order along the road (d = distance ahead). Every gate sits well before the next enemy so none is stuck behind a blocking enemy.
     return { status: 'ready', t: 0, count: C.START_COUNT, u: 0, cool: 0, tcool: 0, hurt: 0, bullets: [], progress: 0, power: null,
       gates: [
-        { type: 'add', value: 10, u: -0.5, d: 0.9, half: 0.45 }, { type: 'mul', value: 2, u: 0.5, d: 0.9, half: 0.45 },
-        { type: 'shoot', base: 1, hits: 0, max: 30, u: 0, d: 1.35, half: 0.4 },
-        { type: 'crate', reward: 'tank', need: 500, hits: 0, u: 0, d: 2.4, half: 0.35 },
-        { type: 'pct', value: 40, u: -0.5, d: 2.9, half: 0.45 }, { type: 'power', kind: 'rapid', u: 0.5, d: 2.9, half: 0.45 },
-        { type: 'shootmul', hits: 0, max: (C.MUL_MAX - 1) * C.MUL_STEP, u: 0, d: 3.4, half: 0.4 },
-        { type: 'crate', reward: 'soldiers', amount: 25, need: 200, hits: 0, u: -0.5, d: 4.4, half: 0.3 },
-        { type: 'shootsub', base: 25, hits: 0, u: 0.5, d: 4.4, half: 0.4 },
-        { type: 'sub', value: 8, u: -0.5, d: 4.9, half: 0.45 }, { type: 'pct', value: -20, u: 0.5, d: 4.9, half: 0.45 }],
-      enemies: [{ id: 'e1', hp: 24, max: 24, u: -0.3, d: 1.9, boss: false }, { id: 'e2', hp: 40, max: 40, u: 0.35, d: 3.9, boss: false },
+        { type: 'add', value: 10, lane: 'L', u: -0.5, d: 0.9, half: 0.5 }, { type: 'mul', value: 2, lane: 'R', u: 0.5, d: 0.9, half: 0.5 },
+        { type: 'shoot', base: 1, hits: 0, max: 30, lane: 'R', u: 0.5, d: 1.35, half: 0.5 },
+        { type: 'crate', reward: 'tank', need: 500, hits: 0, lane: 'L', u: -0.5, d: 2.4, half: 0.5 },
+        { type: 'shootsub', base: 25, hits: 0, lane: 'R', u: 0.5, d: 2.4, half: 0.5 },
+        { type: 'pct', value: 40, lane: 'L', u: -0.5, d: 2.9, half: 0.5 }, { type: 'power', kind: 'rapid', lane: 'R', u: 0.5, d: 2.9, half: 0.5 },
+        { type: 'shootmul', hits: 0, max: (C.MUL_MAX - 1) * C.MUL_STEP, lane: 'L', u: -0.5, d: 3.4, half: 0.5 },
+        { type: 'crate', reward: 'soldiers', amount: 25, need: 200, hits: 0, lane: 'L', u: -0.5, d: 4.4, half: 0.5 },
+        { type: 'sub', value: 8, lane: 'L', u: -0.5, d: 4.9, half: 0.5 }, { type: 'pct', value: -20, lane: 'R', u: 0.5, d: 4.9, half: 0.5 }],
+      enemies: [{ id: 'e1', hp: 24, max: 24, lane: 'L', u: -0.5, d: 1.4, boss: false }, { id: 'e2', hp: 40, max: 40, lane: 'R', u: 0.5, d: 3.5, boss: false },
         { id: 'boss', hp: 220, max: 220, u: 0, d: 5.6, boss: true, w: 0.3 }] };
   }
   function start(s) { s.status = 'playing'; return s; }
@@ -115,7 +121,7 @@
     s.enemies.forEach(function (e) { e.d -= scroll; });
     var fd = frontD(s.count), immune = !!(s.power && (s.power.kind === 'tank' || s.power.kind === 'shield'));
     s.gates.forEach(function (g) {
-      if (!g.done && g.d <= fd) { g.done = true; if (Math.abs(s.u - g.u) <= g.half) { if (g.type === 'power') grantPower(s, g.kind); else s.count = applyGate(g, s.count); } }
+      if (!g.done && g.d <= fd) { g.done = true; if (covers(g, s.u)) { if (g.type === 'power') grantPower(s, g.kind); else s.count = applyGate(g, s.count); } }
     });
     // An enemy that reaches the squad (or goes past it) is gone, and the squad loses as many soldiers as enemies were left.
     s.enemies.forEach(function (e) {
@@ -132,11 +138,11 @@
       b.d += C.BULLET_SPEED * dt;
       for (var i = 0; i < s.enemies.length; i++) { // a bullet hits the first enemy it touches
         var e = s.enemies[i];
-        if (e.hp > 0 && Math.abs(b.u - e.u) < (e.w || 0.14) && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { e.hp = Math.max(0, e.hp - b.w); return false; }
+        if (e.hp > 0 && covers(e, b.u) && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { e.hp = Math.max(0, e.hp - b.w); return false; }
       }
       for (var j = 0; j < s.gates.length; j++) {
         var g = s.gates[j];
-        if (isShootable(g) && isOpen(g) && Math.abs(b.u - g.u) <= g.half && b.d >= g.d - 0.03 && b.d <= g.d + 0.06) { addHits(s, g, b.w); return false; }
+        if (isShootable(g) && isOpen(g) && covers(g, b.u) && b.d >= g.d - 0.03 && b.d <= g.d + 0.06) { addHits(s, g, b.w); return false; }
       }
       return b.d <= 1.05;
     });
@@ -154,5 +160,5 @@
     return s;
   }
   return { C: C, advance: advance, roadHalfWidth: roadHalfWidth, toScreen: toScreen, layout: layout, frontD: frontD, applyGate: applyGate,
-    gateValue: gateValue, isShootable: isShootable, isOpen: isOpen, createState: createState, start: start, step: step };
+    covers: covers, gateValue: gateValue, isShootable: isShootable, isOpen: isOpen, createState: createState, start: start, step: step };
 });

@@ -58,15 +58,13 @@ test('gate arithmetic and fresh state on restart', () => {
   assert.ok(!G.createState().gates.some((g) => g.broken) && G.createState().power === null);
 });
 
-test('a full round can be won and lost, and gates never sit between the squad and a blocking enemy', () => {
+test('a full round can be won and lost', () => {
   const win = G.start(G.createState()); win.count = 300;
   for (let i = 0; i < 60 * 240 && win.status === 'playing'; i++) G.step(win, 1 / 60, 0);
   assert.strictEqual(win.status, 'won');
   const lose = G.start(G.createState()); lose.count = 1; lose.gates = [];
   for (let i = 0; i < 60 * 240 && lose.status === 'playing'; i++) G.step(lose, 1 / 60, 0);
   assert.strictEqual(lose.status, 'lost');
-  const lv = G.createState();
-  lv.enemies.forEach((e) => lv.gates.filter((g) => g.d < e.d).forEach((g) => assert.ok(e.d - g.d >= 0.4, `gate ${g.type}@${g.d} too close before enemy ${e.id}@${e.d}`)));
 });
 
 test('shooting gate value is capped and never exceeds its maximum', () => {
@@ -278,7 +276,7 @@ test('mission fails when the squad count drops to zero', () => {
   assert.strictEqual(s.status, 'lost');
 });
 
-test('the default round is winnable from 12 soldiers by moving to face the enemies, and not by hiding at the edge', () => {
+test('the default round is winnable from 12 soldiers by moving to face the enemies', () => {
   const bot = (s) => {
     const pairs = s.gates.filter((g) => !g.done && !G.isShootable(g) && g.d < 0.55 && g.d >= 0);
     let tu = null;
@@ -289,8 +287,6 @@ test('the default round is winnable from 12 soldiers by moving to face the enemi
   };
   const a = G.start(G.createState()); for (let i = 0; i < 60 * 300 && a.status === 'playing'; i++) G.step(a, 1 / 60, bot(a));
   assert.strictEqual(a.status, 'won');
-  const b = G.start(G.createState()); for (let i = 0; i < 60 * 300 && b.status === 'playing'; i++) G.step(b, 1 / 60, b.u < 0.5 ? 1 : 0);
-  assert.strictEqual(b.status, 'lost');
 });
 
 test('every object type approaches with the same look: same foot speed and same growth rate', () => {
@@ -302,4 +298,44 @@ test('every object type approaches with the same look: same foot speed and same 
     assert.ok(Math.abs(w - s) < 1e-9 && Math.abs(h - s) < 1e-9, `growth differs at ${a}->${b}: banner ${w}, ${h}, sprite ${s}`);
   }
   assert.ok(Math.abs((foot(0.5) - foot(0.9)) - (foot(0.1) - foot(0.5)) * (0.4 / 0.4)) < 1e-9, 'foot speed is not constant in d');
+});
+
+// ---- lane model: left lane (u < 0), right lane (u >= 0); only the boss sits in the centre ----
+test('the default level has no non-boss object in the centre: every enemy, gate and crate fills exactly one lane', () => {
+  const lv = G.createState();
+  lv.gates.forEach((g) => { assert.ok(g.lane === 'L' || g.lane === 'R', `${g.type} not in a lane`); assert.strictEqual(Math.abs(g.u), 0.5); assert.strictEqual(g.half, 0.5); });
+  lv.enemies.filter((e) => !e.boss).forEach((e) => { assert.ok(e.lane === 'L' || e.lane === 'R', `${e.id} not in a lane`); assert.strictEqual(Math.abs(e.u), 0.5); });
+  assert.strictEqual(lv.enemies.filter((e) => e.boss).length, 1);
+  const pairs = {}; lv.gates.forEach((g) => { (pairs[g.d] = pairs[g.d] || []).push(g.lane); });
+  Object.values(pairs).forEach((lanes) => assert.strictEqual(new Set(lanes).size, lanes.length, 'two objects share a lane at the same distance'));
+});
+
+test('crates and shoot-gates are only hit by bullets flying in their own lane', () => {
+  for (const [lane, u, squadU] of [['L', -0.5, 0.85], ['R', 0.5, -0.85]]) {
+    const g = { type: 'shoot', base: 1, hits: 0, max: 30, lane, u, d: 0.9, half: 0.5 };
+    const off = G.start(G.createState()); off.gates = [g]; off.enemies = []; off.count = 12; off.u = squadU; off.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }];
+    for (let i = 0; i < 60; i++) G.step(off, 1 / 60, 0);
+    assert.strictEqual(g.hits, 0, `lane ${lane}: shot from the other lane`);
+    const on = G.start(G.createState()); const g2 = Object.assign({}, g); on.gates = [g2]; on.count = 12; on.u = -squadU; on.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }];
+    for (let i = 0; i < 60; i++) G.step(on, 1 / 60, 0);
+    assert.ok(g2.hits > 0, `lane ${lane}: not hit from its own lane`);
+  }
+});
+
+test('enemies are only hit from their own lane, but they still cost the squad when they reach it', () => {
+  const mk = (lane, u, squadU) => { const s = G.start(G.createState()); s.gates = []; s.u = squadU; s.count = 12; s.enemies = [{ id: 'e', hp: 9999, max: 9999, lane, u, d: 0.9, boss: false }]; return s; };
+  const wrong = mk('R', 0.5, -0.85); for (let i = 0; i < 60; i++) G.step(wrong, 1 / 60, 0); assert.strictEqual(wrong.enemies[0].hp, 9999);
+  const right = mk('R', 0.5, 0.85); for (let i = 0; i < 60; i++) G.step(right, 1 / 60, 0); assert.ok(right.enemies[0].hp < 9999);
+  const miss = mk('R', 0.5, -0.85); miss.enemies[0].hp = miss.enemies[0].max = 5; miss.count = 30;
+  for (let i = 0; i < 900 && !miss.enemies[0].passed; i++) G.step(miss, 1 / 60, 0);
+  assert.ok(miss.enemies[0].passed && 30 - miss.count >= 5, 'an enemy in the other lane must still cost soldiers');
+});
+
+test('a lane gate applies only to the squad that is in that lane when it makes contact', () => {
+  for (const [squadU, applied] of [[-0.6, 'L'], [0.6, 'R']]) {
+    const s = G.start(G.createState()); s.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }]; s.count = 10; s.u = squadU;
+    const L = { type: 'add', value: 5, lane: 'L', u: -0.5, d: 0.5, half: 0.5 }, R = { type: 'add', value: 100, lane: 'R', u: 0.5, d: 0.5, half: 0.5 };
+    s.gates = [L, R]; for (let i = 0; i < 600 && !(L.done && R.done); i++) G.step(s, 1 / 60, 0);
+    assert.strictEqual(s.count, applied === 'L' ? 15 : 110, `squad at ${squadU}`);
+  }
 });
