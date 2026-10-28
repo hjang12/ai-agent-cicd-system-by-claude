@@ -212,3 +212,83 @@ test('the default level uses every gate type and each gate has valid fields', ()
   const w = G.start(G.createState()); w.count = 300; for (let i = 0; i < 60 * 300 && w.status === 'playing'; i++) G.step(w, 1 / 60, 0);
   assert.strictEqual(w.status, 'won');
 });
+
+function bare(extra) {
+  const s = G.start(G.createState()); s.gates = []; s.count = 30; s.u = 0; s.enemies = [];
+  return Object.assign(s, extra || {});
+}
+const enemy = (o) => Object.assign({ id: 'x', hp: 10, max: 10, u: 0, d: 0.9, boss: false }, o);
+
+test('bullets fly straight: lateral position never changes, and they never curve toward a target', () => {
+  const s = bare({ enemies: [enemy({ hp: 9999, max: 9999, u: 0.9, d: 0.95 })] });
+  G.step(s, 1 / 60, 0);
+  assert.ok(s.bullets.length > 0);
+  const start = s.bullets.map((b) => b.u);
+  for (let i = 0; i < 40; i++) G.step(s, 1 / 60, 0);
+  const tracked = s.bullets.filter((b) => b.d < 0.8);
+  assert.ok(tracked.length > 0); tracked.forEach((b) => assert.ok(start.some((u) => Math.abs(u - b.u) < 1e-12), 'bullet drifted sideways'));
+  assert.ok(s.enemies[0].hp === 9999, 'an off-axis enemy must not be hit by straight bullets');
+});
+
+test('bullets only hit what is in their own lane', () => {
+  const inLane = bare({ enemies: [enemy({ hp: 9999, max: 9999, u: 0, d: 0.9 })] });
+  for (let i = 0; i < 90; i++) G.step(inLane, 1 / 60, 0);
+  assert.ok(inLane.enemies[0].hp < 9999);
+  const moved = bare({ u: 0.85, enemies: [enemy({ hp: 9999, max: 9999, u: -0.8, d: 0.95 })] });
+  for (let i = 0; i < 30; i++) G.step(moved, 1 / 60, 0);
+  assert.strictEqual(moved.enemies[0].hp, 9999);
+});
+
+test('nothing waits in front of the squad: the road scrolls at a constant speed', () => {
+  const s = bare({ enemies: [enemy({ hp: 9999, max: 9999, u: 0.9, d: 0.6 })], gates: [{ type: 'crate', reward: 'tank', need: 500, hits: 0, u: -0.9, d: 0.7, half: 0.05 }] });
+  let prev = s.enemies[0].d;
+  for (let i = 0; i < 120; i++) { G.step(s, 1 / 60, 0); if (s.enemies[0].hp > 0) { assert.ok(Math.abs(prev - s.enemies[0].d - G.C.SPEED / 60) < 1e-9, 'scroll speed changed'); prev = s.enemies[0].d; } }
+});
+
+test('a surviving enemy that reaches the squad is removed and costs as many soldiers as enemies were left', () => {
+  const s = bare({ enemies: [enemy({ hp: 7, max: 7, u: 0.9, d: 0.5 })], power: { kind: 'shield', t: 0 } }); s.power = null; s.count = 50;
+  for (let i = 0; i < 600 && !s.enemies[0].passed; i++) G.step(s, 1 / 60, 0);
+  assert.ok(s.enemies[0].passed && s.enemies[0].hp === 0);
+  assert.ok(50 - s.count >= 7 && 50 - s.count <= 7 + 4, `lost ${50 - s.count}`);
+});
+
+test('an enemy that goes past the map still costs soldiers even if the squad is far from it', () => {
+  const s = bare({ u: -0.85, enemies: [enemy({ hp: 12, max: 12, u: 0.9, d: 0.4 })] }); s.count = 40;
+  for (let i = 0; i < 600 && !s.enemies[0].passed; i++) G.step(s, 1 / 60, 0);
+  assert.ok(s.enemies[0].passed && 40 - s.count >= 12);
+});
+
+test('tank and shield make the squad immune to enemies reaching it', () => {
+  for (const kind of ['tank', 'shield']) {
+    const s = bare({ enemies: [enemy({ hp: 15, max: 15, u: 0.9, d: 0.5 })], power: { kind, t: 20 } }); const c0 = s.count;
+    for (let i = 0; i < 600 && !s.enemies[0].passed; i++) G.step(s, 1 / 60, 0);
+    assert.ok(s.enemies[0].passed && s.count === c0, kind);
+  }
+});
+
+test('the boss reaching the squad fails the mission', () => {
+  const s = bare({ enemies: [enemy({ id: 'boss', hp: 50, max: 50, u: 0.9, d: 0.5, boss: true, w: 0.05 })] }); s.count = 500;
+  for (let i = 0; i < 900 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.strictEqual(s.status, 'lost'); assert.strictEqual(s.count, 0);
+});
+
+test('mission fails when the squad count drops to zero', () => {
+  const s = bare({ enemies: [enemy({ hp: 40, max: 40, u: 0.9, d: 0.5 })] }); s.count = 10;
+  for (let i = 0; i < 900 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.strictEqual(s.status, 'lost');
+});
+
+test('the default round is winnable from 12 soldiers by moving to face the enemies, and not by hiding at the edge', () => {
+  const bot = (s) => {
+    const pairs = s.gates.filter((g) => !g.done && !G.isShootable(g) && g.d < 0.55 && g.d >= 0);
+    let tu = null;
+    if (pairs.length) tu = pairs.map((g) => ({ g, v: g.type === 'power' ? s.count * 1.4 : G.applyGate(g, s.count) })).sort((a, b) => b.v - a.v)[0].g.u;
+    if (tu === null) { const e = s.enemies.filter((x) => x.hp > 0 && x.d <= 1).sort((a, b) => a.d - b.d)[0]; if (e) tu = e.u; }
+    if (tu === null) { const g = s.gates.filter((x) => G.isShootable(x) && G.isOpen(x) && x.d <= 1).sort((a, b) => a.d - b.d)[0]; if (g) tu = g.u; }
+    if (tu === null) return 0; const d = tu - s.u; return Math.abs(d) < 0.03 ? 0 : Math.sign(d);
+  };
+  const a = G.start(G.createState()); for (let i = 0; i < 60 * 300 && a.status === 'playing'; i++) G.step(a, 1 / 60, bot(a));
+  assert.strictEqual(a.status, 'won');
+  const b = G.start(G.createState()); for (let i = 0; i < 60 * 300 && b.status === 'playing'; i++) G.step(b, 1 / 60, b.u < 0.5 ? 1 : 0);
+  assert.strictEqual(b.status, 'lost');
+});
