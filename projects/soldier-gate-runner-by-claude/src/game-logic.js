@@ -3,7 +3,7 @@
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.GameLogic = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
-  var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.14, STOP_D: 0.3,
+  var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.14,
     FIRE_RANGE: 1.0, ENEMY_RANGE: 0.75, BULLET_SPEED: 1.3, FIRE_INTERVAL: 0.18, SHOOTERS_MAX: 24, START_COUNT: 12, ENEMY_DPS: 0.8,
     TANK_TIME: 8, POWER_TIME: 8, TANK_SHELL_W: 12, TANK_INTERVAL: 0.35, CRATE_PENALTY: 8, MUL_STEP: 25, MUL_MAX: 5 };
 
@@ -86,59 +86,64 @@
         { type: 'shootsub', base: 25, hits: 0, u: 0.5, d: 4.4, half: 0.4 },
         { type: 'sub', value: 8, u: -0.5, d: 4.9, half: 0.45 }, { type: 'pct', value: -20, u: 0.5, d: 4.9, half: 0.45 }],
       enemies: [{ id: 'e1', hp: 24, max: 24, u: -0.3, d: 1.9, boss: false }, { id: 'e2', hp: 40, max: 40, u: 0.35, d: 3.9, boss: false },
-        { id: 'boss', hp: 220, max: 220, u: 0, d: 5.6, boss: true }] };
+        { id: 'boss', hp: 220, max: 220, u: 0, d: 5.6, boss: true, w: 0.3 }] };
   }
   function start(s) { s.status = 'playing'; return s; }
 
-  function target(s) {
-    var best = null;
-    s.enemies.forEach(function (e) { if (e.hp > 0 && e.d <= C.FIRE_RANGE && (!best || e.d < best.d)) best = { u: e.u, d: e.d, kind: 'enemy', ref: e }; });
-    s.gates.forEach(function (g) { if (isShootable(g) && isOpen(g) && g.d <= C.FIRE_RANGE && (!best || g.d < best.d)) best = { u: g.u, d: g.d, kind: 'gate', ref: g }; });
-    return best;
+  // Something worth shooting is ahead (an enemy or a gate that can still absorb hits).
+  function hasTarget(s) {
+    return s.enemies.some(function (e) { return e.hp > 0 && e.d <= C.FIRE_RANGE; }) ||
+      s.gates.some(function (g) { return isShootable(g) && isOpen(g) && g.d <= C.FIRE_RANGE; });
   }
-  function fire(s, tgt) {
+  // Bullets fly straight ahead along the road at the shooter's lateral position: no aiming, no homing.
+  function fire(s) {
     var pos = layout(s.count, s.u), n = Math.min(s.count, C.SHOOTERS_MAX), heavy = !!(s.power && s.power.kind === 'heavy'), weight = Math.ceil(s.count / n) * (heavy ? 2 : 1);
     for (var k = 0; k < n; k++) {
       var p = pos[Math.floor((k + 0.5) * s.count / n)];
-      s.bullets.push({ u0: p.u, u: p.u, d0: p.d, d: p.d, w: weight, ref: tgt.ref, kind: tgt.kind, big: false, heavy: heavy });
+      s.bullets.push({ u: p.u, d: p.d, w: weight, big: false, heavy: heavy });
     }
   }
-  function fireTank(s, tgt) {
-    var d0 = frontD(s.count) + 0.03;
-    s.bullets.push({ u0: s.u, u: s.u, d0: d0, d: d0, w: C.TANK_SHELL_W, ref: tgt.ref, kind: tgt.kind, big: true });
-  }
+  function fireTank(s) { s.bullets.push({ u: s.u, d: frontD(s.count) + 0.03, w: C.TANK_SHELL_W, big: true, heavy: false }); }
 
   function step(s, dt, input) {
     if (s.status !== 'playing') return s;
     s.t += dt; s.u = clamp(s.u + clamp(input || 0, -1, 1) * dt * 0.9, -0.85, 0.85);
     if (s.power) { s.power.t -= dt; if (s.power.t <= 0) s.power = null; }
-    var front = null;
-    s.enemies.forEach(function (e) { if (e.hp > 0 && (!front || e.d < front.d)) front = e; });
-    var scroll = front && front.d <= C.STOP_D + 0.02 ? 0 : C.SPEED * dt; s.progress += scroll;
+    var scroll = C.SPEED * dt; s.progress += scroll; // the road never stops: nothing waits in front of the squad
     s.gates.forEach(function (g) { g.d -= scroll; });
     s.enemies.forEach(function (e) { e.d -= scroll; });
-    var fd = frontD(s.count);
+    var fd = frontD(s.count), immune = !!(s.power && (s.power.kind === 'tank' || s.power.kind === 'shield'));
     s.gates.forEach(function (g) {
       if (!g.done && g.d <= fd) { g.done = true; if (Math.abs(s.u - g.u) <= g.half) { if (g.type === 'power') grantPower(s, g.kind); else s.count = applyGate(g, s.count); } }
     });
-    var tgt = target(s); s.cool -= dt; s.tcool -= dt;
-    if (tgt && s.cool <= 0) { fire(s, tgt); s.cool = C.FIRE_INTERVAL * (s.power && s.power.kind === 'rapid' ? 0.5 : 1); }
-    if (tgt && s.power && s.power.kind === 'tank' && s.tcool <= 0) { fireTank(s, tgt); s.tcool = C.TANK_INTERVAL; }
+    // An enemy that reaches the squad (or goes past it) is gone, and the squad loses as many soldiers as enemies were left.
+    s.enemies.forEach(function (e) {
+      if (e.hp > 0 && e.d <= fd) {
+        if (e.boss) s.count = 0; // the boss reaching the squad fails the mission
+        else if (!immune) s.count = Math.max(0, s.count - Math.ceil(e.hp));
+        e.hp = 0; e.passed = true;
+      }
+    });
+    var ahead = hasTarget(s); s.cool -= dt; s.tcool -= dt;
+    if (ahead && s.cool <= 0) { fire(s); s.cool = C.FIRE_INTERVAL * (s.power && s.power.kind === 'rapid' ? 0.5 : 1); }
+    if (ahead && s.power && s.power.kind === 'tank' && s.tcool <= 0) { fireTank(s); s.tcool = C.TANK_INTERVAL; }
     s.bullets = s.bullets.filter(function (b) {
       b.d += C.BULLET_SPEED * dt;
-      b.u = b.u0 + (b.ref.u - b.u0) * clamp((b.d - b.d0) / Math.max(b.ref.d - b.d0, 0.05), 0, 1);
       for (var i = 0; i < s.enemies.length; i++) { // a bullet hits the first enemy it touches
         var e = s.enemies[i];
-        if (e.hp > 0 && Math.abs(b.u - e.u) < 0.14 && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { e.hp = Math.max(0, e.hp - b.w); return false; }
+        if (e.hp > 0 && Math.abs(b.u - e.u) < (e.w || 0.14) && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { e.hp = Math.max(0, e.hp - b.w); return false; }
       }
-      if (b.kind === 'gate' && !b.ref.done && b.d >= b.ref.d - 0.03) { addHits(s, b.ref, b.w); return false; }
-      return b.d <= 1.05 && b.d >= -0.05;
+      for (var j = 0; j < s.gates.length; j++) {
+        var g = s.gates[j];
+        if (isShootable(g) && isOpen(g) && Math.abs(b.u - g.u) <= g.half && b.d >= g.d - 0.03 && b.d <= g.d + 0.06) { addHits(s, g, b.w); return false; }
+      }
+      return b.d <= 1.05;
     });
     var engaged = s.enemies.filter(function (e) { return e.hp > 0 && e.d <= C.ENEMY_RANGE; }).length;
-    if (!(s.power && (s.power.kind === 'tank' || s.power.kind === 'shield'))) s.hurt += engaged * C.ENEMY_DPS * dt; // tank and shield protect the squad
+    if (!immune) s.hurt += engaged * C.ENEMY_DPS * dt; // tank and shield protect the squad
     while (s.hurt >= 1) { s.hurt -= 1; s.count = Math.max(0, s.count - 1); }
-    if (s.enemies.every(function (e) { return e.hp <= 0; })) { s.status = 'won'; s.power = null; }
-    else if (s.count <= 0) { s.status = 'lost'; s.power = null; }
+    if (s.count <= 0) { s.status = 'lost'; s.power = null; }
+    else if (s.enemies.every(function (e) { return e.hp <= 0; })) { s.status = 'won'; s.power = null; }
     return s;
   }
   // Advance by dt * speed in fixed sub-steps (<= 1/60 s) so collisions stay accurate at x2..x4.

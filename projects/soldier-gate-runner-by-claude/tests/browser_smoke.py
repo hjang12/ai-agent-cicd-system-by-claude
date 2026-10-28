@@ -54,7 +54,7 @@ def main(screenshot=None):
         assert fresh["c"] == 12 and sum(fresh["h"]) == 0, fresh
 
         # lose path
-        page.evaluate("window.__game.state.count = 1; window.__game.fastForward(60)")
+        page.evaluate("window.__game.state.count = 1; window.__game.state.gates = []; window.__game.fastForward(60)")
         assert status() == "lost", status()
         assert "패배" in page.locator("#ov-title").inner_text()
 
