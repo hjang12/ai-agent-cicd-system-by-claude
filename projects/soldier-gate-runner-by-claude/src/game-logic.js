@@ -53,6 +53,8 @@
     if (g.type === 'crate') return Math.max(0, g.need - g.hits);
     return g.value;
   }
+  // Visual-effect events for the renderer (capped so an undrained queue cannot grow without bound).
+  function emit(s, ev) { if (s.events.length < 400) s.events.push(ev); }
   function grantPower(s, kind) { s.power = { kind: kind, t: kind === 'tank' ? C.TANK_TIME : C.POWER_TIME }; }
   function applyGate(g, count) {
     if (g.type === 'add') return count + g.value;
@@ -73,7 +75,7 @@
     else if (g.type === 'crate') {
       g.hits = Math.min(g.need, g.hits + w);
       if (g.hits >= g.need && !g.broken) {
-        g.broken = true; g.done = true;
+        g.broken = true; g.done = true; emit(s, { k: 'break', u: g.u, d: g.d });
         var reward = g.reward || 'tank';
         if (reward === 'soldiers') s.count += g.amount; else grantPower(s, reward);
       }
@@ -82,7 +84,7 @@
 
   function createState() {
     // Order along the road (d = distance ahead). Every gate sits well before the next enemy so none is stuck behind a blocking enemy.
-    return { status: 'ready', t: 0, count: C.START_COUNT, u: 0, cool: 0, tcool: 0, hurt: 0, bullets: [], progress: 0, power: null,
+    return { status: 'ready', t: 0, count: C.START_COUNT, u: 0, cool: 0, tcool: 0, hurt: 0, bullets: [], progress: 0, power: null, events: [], fireT: -1, tankT: -1,
       gates: [
         { type: 'add', value: 10, lane: 'L', u: -0.5, d: 0.9, half: 0.5 }, { type: 'mul', value: 2, lane: 'R', u: 0.5, d: 0.9, half: 0.5 },
         { type: 'shoot', base: 1, hits: 0, max: 30, lane: 'R', u: 0.5, d: 1.35, half: 0.5 },
@@ -104,13 +106,14 @@
   }
   // Bullets fly straight ahead along the road at the shooter's lateral position: no aiming, no homing.
   function fire(s) {
+    s.fireT = s.t;
     var pos = layout(s.count, s.u), n = Math.min(s.count, C.SHOOTERS_MAX), heavy = !!(s.power && s.power.kind === 'heavy'), weight = Math.ceil(s.count / n) * (heavy ? 2 : 1);
     for (var k = 0; k < n; k++) {
       var p = pos[Math.floor((k + 0.5) * s.count / n)];
       s.bullets.push({ u: p.u, d: p.d, w: weight, big: false, heavy: heavy });
     }
   }
-  function fireTank(s) { s.bullets.push({ u: s.u, d: frontD(s.count) + 0.03, w: C.TANK_SHELL_W, big: true, heavy: false }); }
+  function fireTank(s) { s.tankT = s.t; s.bullets.push({ u: s.u, d: frontD(s.count) + 0.03, w: C.TANK_SHELL_W, big: true, heavy: false }); }
 
   function step(s, dt, input) {
     if (s.status !== 'playing') return s;
@@ -138,11 +141,11 @@
       b.d += C.BULLET_SPEED * dt;
       for (var i = 0; i < s.enemies.length; i++) { // a bullet hits the first enemy it touches
         var e = s.enemies[i];
-        if (e.hp > 0 && covers(e, b.u) && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { e.hp = Math.max(0, e.hp - b.w); return false; }
+        if (e.hp > 0 && covers(e, b.u) && b.d >= e.d - 0.03 && b.d <= e.d + 0.06) { var was = e.hp; e.hp = Math.max(0, e.hp - b.w); e.hitT = s.t; emit(s, { k: 'hit', t: 'e', u: b.u, d: b.d, big: b.big }); if (was > 0 && e.hp <= 0) emit(s, { k: 'die', u: e.u, d: e.d, boss: !!e.boss }); return false; }
       }
       for (var j = 0; j < s.gates.length; j++) {
         var g = s.gates[j];
-        if (isShootable(g) && isOpen(g) && covers(g, b.u) && b.d >= g.d - 0.03 && b.d <= g.d + 0.06) { addHits(s, g, b.w); return false; }
+        if (isShootable(g) && isOpen(g) && covers(g, b.u) && b.d >= g.d - 0.03 && b.d <= g.d + 0.06) { addHits(s, g, b.w); emit(s, { k: 'hit', t: 'g', u: b.u, d: b.d, big: b.big }); return false; }
       }
       return b.d <= 1.05;
     });

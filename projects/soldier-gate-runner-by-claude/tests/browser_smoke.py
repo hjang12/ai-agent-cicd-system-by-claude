@@ -85,6 +85,14 @@ def main(screenshot=None):
         page.mouse.move(box["x"] + box["width"] * 0.2, box["y"] + box["height"] * 0.8)
         page.mouse.down(); page.mouse.move(box["x"] + box["width"] * 0.25, box["y"] + box["height"] * 0.8); page.mouse.up()
         assert page.evaluate("window.__game.state.u") < 0, "drag input ignored"
+        # combat effects: sparks appear while real-time frames run, and drawing a huge squad stays affordable
+        page.evaluate("var s = window.__game.state; s.count = 300; s.u = 0; s.gates = []; s.enemies = [{id:'e', hp: 99999, max: 99999, lane: 'R', u: 0.5, d: 0.85, boss: false}]")
+        page.wait_for_timeout(500)
+        assert page.evaluate("window.__game.fxCount") > 0, "no impact effects were spawned"
+        ms = page.evaluate("window.__game.perf(60)")
+        assert ms < 40, f"drawing 300 soldiers is too slow: {ms:.1f} ms/frame"
+        print(f"draw cost with 300 soldiers: {ms:.1f} ms/frame")
+
         # landscape phones: fits one screen, controls beside the game, and input maps to the centred playfield
         page.click("#ov-btn") if page.locator("#overlay").is_visible() else None
         for size in ({"width": 844, "height": 390}, {"width": 667, "height": 375}):
