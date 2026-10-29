@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const G = require('../src/game-logic.js');
+const S = require('./sim.js');
 
 test('road half width grows toward the viewer', () => {
   assert.ok(G.roadHalfWidth(0) < G.roadHalfWidth(0.5) && G.roadHalfWidth(0.5) < G.roadHalfWidth(1));
@@ -36,12 +37,12 @@ test('hits reduce enemy hp and a won round ends the game', () => {
   const s = G.start(G.createState()); s.count = 60; const total = s.enemies.reduce((a, e) => a + e.hp, 0);
   let min = total;
   for (let i = 0; i < 20000 && s.status === 'playing'; i++) { G.step(s, 1 / 60, 0); min = Math.min(min, s.enemies.reduce((a, e) => a + e.hp, 0)); }
-  assert.ok(min < total); assert.ok(['won', 'lost'].includes(s.status));
+  assert.ok(min < total); assert.ok(['stageclear', 'lost'].includes(s.status));
 });
 
 test('shooting gate: displayed value equals hits and the final count gain', () => {
-  const s = G.start(G.createState()); const g = s.gates.find((x) => x.type === 'shoot');
-  s.enemies = [{ id: 'far', hp: 999, max: 999, u: 0, d: 10, boss: false }]; s.gates = [g]; g.d = 0.4; s.count = 40; s.u = 0;
+  const g = { type: 'shoot', base: 1, hits: 0, max: 30, lane: 'R', u: 0.5, d: 0.4, half: 0.5 };
+  const s = G.start(G.createState()); s.gates = [g]; s.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }]; s.count = 40; s.u = 0.5;
   let before = null;
   for (let i = 0; i < 20000 && !g.done; i++) { before = s.count; G.step(s, 1 / 60, 0); }
   assert.ok(g.hits > 0); assert.strictEqual(G.gateValue(g), g.base + g.hits);
@@ -58,18 +59,18 @@ test('gate arithmetic and fresh state on restart', () => {
   assert.ok(!G.createState().gates.some((g) => g.broken) && G.createState().power === null);
 });
 
-test('a full round can be won and lost', () => {
+test('a stage can be cleared and lost', () => {
   const win = G.start(G.createState()); win.count = 300;
   for (let i = 0; i < 60 * 240 && win.status === 'playing'; i++) G.step(win, 1 / 60, 0);
-  assert.strictEqual(win.status, 'won');
+  assert.strictEqual(win.status, 'stageclear');
   const lose = G.start(G.createState()); lose.count = 1; lose.gates = [];
   for (let i = 0; i < 60 * 240 && lose.status === 'playing'; i++) G.step(lose, 1 / 60, 0);
   assert.strictEqual(lose.status, 'lost');
 });
 
 test('shooting gate value is capped and never exceeds its maximum', () => {
-  const s = G.start(G.createState()); const g = s.gates.find((x) => x.type === 'shoot');
-  s.enemies = [{ id: 'far', hp: 999, max: 999, u: 0, d: 10, boss: false }]; s.gates = [g]; g.d = 0.7; s.count = 300; s.u = 0;
+  const g = { type: 'shoot', base: 1, hits: 0, max: 30, lane: 'R', u: 0.5, d: 0.7, half: 0.5 };
+  const s = G.start(G.createState()); s.gates = [g]; s.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }]; s.count = 300; s.u = 0.5;
   for (let i = 0; i < 20000 && !g.done; i++) G.step(s, 1 / 60, 0);
   assert.ok(g.base + g.hits <= g.max); assert.strictEqual(g.base + g.hits, g.max);
 });
@@ -203,12 +204,15 @@ test('crate rewards: soldiers are added instantly, rapid grants the power', () =
   }
 });
 
-test('the default level uses every gate type and each gate has valid fields', () => {
-  const lv = G.createState(), types = new Set(lv.gates.map((g) => g.type));
-  ['add', 'sub', 'mul', 'pct', 'power', 'shoot', 'shootmul', 'shootsub', 'crate'].forEach((k) => assert.ok(types.has(k), k));
-  lv.gates.forEach((g) => { assert.ok(g.half > 0 && g.d > 0 && Math.abs(g.u) <= 1); if (g.type === 'power') assert.ok(['rapid', 'heavy', 'shield'].includes(g.kind)); });
-  const w = G.start(G.createState()); w.count = 300; for (let i = 0; i < 60 * 300 && w.status === 'playing'; i++) G.step(w, 1 / 60, 0);
-  assert.strictEqual(w.status, 'won');
+test('the generated stages together use every gate type and enemy kind, and every object is valid', () => {
+  const types = new Set(), kinds = new Set();
+  for (let n = 1; n <= G.C.STAGES; n++) {
+    const st = G.buildStage(n);
+    st.gates.forEach((g) => { types.add(g.type); assert.ok(g.half > 0 && g.d > 0 && Math.abs(g.u) <= 1); if (g.type === 'power') assert.ok(['rapid', 'heavy', 'shield'].includes(g.kind)); if (g.type === 'crate') assert.ok(['tank', 'soldiers', 'rapid'].includes(g.reward)); });
+    st.enemies.forEach((e) => { kinds.add(e.kind); assert.ok(e.hp > 0 && e.max === e.hp && e.d > 0); });
+  }
+  ['add', 'sub', 'mul', 'div', 'pct', 'power', 'shoot', 'shootmul', 'shootsub', 'crate'].forEach((k) => assert.ok(types.has(k), 'gate ' + k));
+  ['grunt', 'heavy', 'sniper', 'boss'].forEach((k) => assert.ok(kinds.has(k), 'enemy ' + k));
 });
 
 function bare(extra) {
@@ -276,18 +280,6 @@ test('mission fails when the squad count drops to zero', () => {
   assert.strictEqual(s.status, 'lost');
 });
 
-test('the default round is winnable from 12 soldiers by moving to face the enemies', () => {
-  const bot = (s) => {
-    const pairs = s.gates.filter((g) => !g.done && !G.isShootable(g) && g.d < 0.55 && g.d >= 0);
-    let tu = null;
-    if (pairs.length) tu = pairs.map((g) => ({ g, v: g.type === 'power' ? s.count * 1.4 : G.applyGate(g, s.count) })).sort((a, b) => b.v - a.v)[0].g.u;
-    if (tu === null) { const e = s.enemies.filter((x) => x.hp > 0 && x.d <= 1).sort((a, b) => a.d - b.d)[0]; if (e) tu = e.u; }
-    if (tu === null) { const g = s.gates.filter((x) => G.isShootable(x) && G.isOpen(x) && x.d <= 1).sort((a, b) => a.d - b.d)[0]; if (g) tu = g.u; }
-    if (tu === null) return 0; const d = tu - s.u; return Math.abs(d) < 0.03 ? 0 : Math.sign(d);
-  };
-  const a = G.start(G.createState()); for (let i = 0; i < 60 * 300 && a.status === 'playing'; i++) G.step(a, 1 / 60, bot(a));
-  assert.strictEqual(a.status, 'won');
-});
 
 test('every object type approaches with the same look: same foot speed and same growth rate', () => {
   const W = 360, H = 640, ratio = (f, a, b) => f(b) / f(a);
@@ -301,13 +293,16 @@ test('every object type approaches with the same look: same foot speed and same 
 });
 
 // ---- lane model: left lane (u < 0), right lane (u >= 0); only the boss sits in the centre ----
-test('the default level has no non-boss object in the centre: every enemy, gate and crate fills exactly one lane', () => {
-  const lv = G.createState();
-  lv.gates.forEach((g) => { assert.ok(g.lane === 'L' || g.lane === 'R', `${g.type} not in a lane`); assert.strictEqual(Math.abs(g.u), 0.5); assert.strictEqual(g.half, 0.5); });
-  lv.enemies.filter((e) => !e.boss).forEach((e) => { assert.ok(e.lane === 'L' || e.lane === 'R', `${e.id} not in a lane`); assert.strictEqual(Math.abs(e.u), 0.5); });
-  assert.strictEqual(lv.enemies.filter((e) => e.boss).length, 1);
-  const pairs = {}; lv.gates.forEach((g) => { (pairs[g.d] = pairs[g.d] || []).push(g.lane); });
-  Object.values(pairs).forEach((lanes) => assert.strictEqual(new Set(lanes).size, lanes.length, 'two objects share a lane at the same distance'));
+test('no non-boss object is in the centre, and objects of one encounter never share a lane (every stage)', () => {
+  for (let n = 1; n <= G.C.STAGES; n++) {
+    const st = G.buildStage(n), all = st.gates.concat(st.enemies.filter((e) => !e.boss));
+    all.forEach((o) => { assert.ok(o.lane === 'L' || o.lane === 'R', `stage ${n}: ${o.type || o.id} not in a lane`); assert.strictEqual(Math.abs(o.u), 0.5); });
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+      if (Math.abs(all[i].d - all[j].d) < 0.1) assert.notStrictEqual(all[i].lane, all[j].lane, `stage ${n}: two objects share a lane at d=${all[i].d}`);
+    }
+    assert.strictEqual(st.enemies.filter((e) => e.boss).length, 1);
+    assert.ok(st.enemies[st.enemies.length - 1].boss, 'the boss comes last');
+  }
 });
 
 test('crates and shoot-gates are only hit by bullets flying in their own lane', () => {
@@ -372,4 +367,64 @@ test('the event queue is capped even if the renderer never drains it', () => {
   const s = G.start(G.createState()); s.count = 300; s.u = 0;
   for (let i = 0; i < 60 * 40 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
   assert.ok(s.events.length <= 400);
+});
+
+// ---- M4: campaign (5 stages), stage flow, enemy kinds, balance ----
+test('stages are deterministic, grow in length, and a stage takes 40-80 seconds at x1', () => {
+  assert.strictEqual(JSON.stringify(G.buildStage(3)), JSON.stringify(G.buildStage(3)));
+  let prev = 0;
+  for (let n = 1; n <= G.C.STAGES; n++) {
+    const st = G.buildStage(n), seconds = st.enemies[st.enemies.length - 1].d / G.C.SPEED;
+    assert.ok(seconds >= 40 && seconds <= 80, `stage ${n} takes ${seconds.toFixed(0)}s`); assert.ok(seconds > prev); prev = seconds;
+  }
+  assert.strictEqual(G.C.STAGES, 5);
+});
+
+test('stage flow: clearing a non-final stage ends in stageclear, half the squad carries over, retry restores the stage start', () => {
+  const s = G.start(G.createState()); assert.strictEqual(s.stage, 1); assert.strictEqual(s.count, 12);
+  s.count = 200; for (let i = 0; i < 60 * 240 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.strictEqual(s.status, 'stageclear');
+  const left = s.count; G.nextStage(s);
+  assert.strictEqual(s.stage, 2); assert.strictEqual(s.status, 'playing');
+  assert.strictEqual(s.count, Math.min(G.C.MAX_COUNT, Math.max(G.C.STAGE_BASE[1], Math.round(left * 0.5))));
+  const start2 = s.count; s.count = 1; s.gates = []; for (let i = 0; i < 60 * 240 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.strictEqual(s.status, 'lost');
+  G.retryStage(s); assert.strictEqual(s.stage, 2); assert.strictEqual(s.status, 'playing'); assert.strictEqual(s.count, start2);
+  assert.ok(s.gates.length > 0 && s.enemies.every((e) => e.hp > 0) && s.bullets.length === 0);
+});
+
+test('clearing the final stage is a win', () => {
+  const s = G.start(G.createState({ stage: G.C.STAGES, count: 300 }));
+  for (let i = 0; i < 60 * 300 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.ok(s.status === 'won' || s.status === 'lost');
+  const t = G.start(G.createState({ stage: G.C.STAGES })); t.enemies.forEach((e) => { e.hp = 0; }); G.step(t, 1 / 60, 0);
+  assert.strictEqual(t.status, 'won');
+});
+
+test('the squad never exceeds the maximum', () => {
+  const s = G.start(G.createState()); s.count = 290; s.gates = [{ type: 'mul', value: 5, lane: 'R', u: 0.5, d: 0.3, half: 0.5 }]; s.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }]; s.u = 0.5;
+  for (let i = 0; i < 300; i++) G.step(s, 1 / 60, 0);
+  assert.strictEqual(s.count, G.C.MAX_COUNT);
+});
+
+test('enemy kinds: snipers hurt from further away, heavies hit harder than the default', () => {
+  const run = (e) => { const s = G.start(G.createState()); s.gates = []; s.u = 0.5; s.count = 100; s.enemies = [Object.assign({ id: 'x', hp: 99999, max: 99999, lane: 'L', u: -0.5, d: 0.95, boss: false }, e)]; for (let i = 0; i < 90; i++) G.step(s, 1 / 60, 0); return 100 - s.count; };
+  assert.strictEqual(run({}), 0); assert.ok(run({ range: 1.0, dps: 3 }) > 0);
+  const near = (dps) => { const s = G.start(G.createState()); s.gates = []; s.u = 0.5; s.count = 200; s.enemies = [{ id: 'x', hp: 99999, max: 99999, lane: 'L', u: -0.5, d: 0.6, boss: false, dps }]; for (let i = 0; i < 90; i++) G.step(s, 1 / 60, 0); return 200 - s.count; };
+  assert.ok(near(6) > near(1));
+});
+
+test('balance: a good player clears all five stages; passive and one-lane play do not', () => {
+  const good = S.playCampaign(S.aimBot);
+  assert.strictEqual(good.status, 'won'); assert.ok(good.count >= 60, `good player finished with ${good.count}`);
+  good.log.concat([{ seconds: good.totalT - good.log.reduce((a, l) => a + l.seconds, 0) }]).forEach((l, i) => assert.ok(l.seconds >= 35 && l.seconds <= 95, `stage ${i + 1} took ${l.seconds}s`));
+  assert.ok(good.totalT >= 200, `the whole run took only ${good.totalT.toFixed(0)}s`);
+  for (const bot of [S.passiveBot, S.leftBot, S.rightBot]) assert.notStrictEqual(S.playCampaign(bot).status, 'won');
+  assert.ok(S.playCampaign(S.passiveBot).stage <= 3);
+});
+
+test('balance: a mistake-prone player usually loses somewhere in the middle (at most 2 of 8 clear the run)', () => {
+  const results = [1, 2, 3, 4, 5, 6, 7, 8].map((seed) => S.playCampaign(S.noisyBot(seed)));
+  assert.ok(results.filter((r) => r.status === 'won').length <= 2, results.map((r) => r.status + r.stage).join(','));
+  assert.ok(results.filter((r) => r.stage >= 2).length >= 3, 'the first stage should be forgiving: ' + results.map((r) => r.stage).join(','));
 });

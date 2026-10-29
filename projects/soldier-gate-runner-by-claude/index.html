@@ -17,6 +17,8 @@
     #speedbar button { min-width: 52px; padding: 8px 12px; border: 2px solid #2f6fd0; border-radius: 10px; background: transparent; color: #cfe2ff; font-weight: 700; font-size: 1rem; cursor: pointer; }
     #speedbar button[aria-pressed="true"] { background: #2f6fd0; color: #fff; }
     @media (min-width: 720px) { #layout { flex-direction: row; align-items: flex-start; } #speedbar { flex-direction: column; } }
+    #ov-btn2 { font-size: 0.95rem; padding: 8px 22px; border: 2px solid #6a7a90; border-radius: 8px; background: transparent; color: #cfe2ff; cursor: pointer; }
+    #ov-btn2[hidden] { display: none; }
     #ov-btn { font-size: 1.1rem; padding: 10px 28px; border: 0; border-radius: 8px; background: #2f6fd0; color: #fff; cursor: pointer; }
     h1 { margin: 0; font-size: 1.25rem; }
     p { margin: 0; font-size: 0.85rem; opacity: 0.75; }
@@ -34,9 +36,9 @@
 <body>
   <h1 id="title">Soldier Gate Runner</h1>
   <div id="layout"><div id="stage"><canvas id="game" width="360" height="640" aria-label="게임 화면"></canvas>
-    <div id="overlay"><h2 id="ov-title"></h2><p id="ov-sub"></p><button id="ov-btn" type="button">시작</button></div></div>
+    <div id="overlay"><h2 id="ov-title"></h2><p id="ov-sub"></p><button id="ov-btn" type="button">시작</button><button id="ov-btn2" type="button" hidden>처음부터</button></div></div>
     <div id="speedbar" role="group" aria-label="게임 속도"><button type="button" data-speed="1">x1</button><button type="button" data-speed="2">x2</button><button type="button" data-speed="3">x3</button><button type="button" data-speed="4">x4</button></div></div>
-  <p id="status" data-version="0.7.0-m3">M3 — 전투 연출, 레인, 배속 x1~x4</p>
+  <p id="status" data-version="0.8.0-m4">M4 — 5단계 캠페인, 레인, 전투 연출, 배속 x1~x4</p>
   <script src="src/game-logic.js"></script>
   <script src="src/game.js"></script>
 </body>

@@ -5,7 +5,9 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   var C = { HORIZON: 0.35, TOP_HALF: 0.08, BOTTOM_HALF: 0.45, U_LIMIT: 0.97, SPEED: 0.14,
     FIRE_RANGE: 1.0, ENEMY_RANGE: 0.75, BULLET_SPEED: 1.3, FIRE_INTERVAL: 0.18, SHOOTERS_MAX: 24, START_COUNT: 12, ENEMY_DPS: 0.8,
-    TANK_TIME: 8, POWER_TIME: 8, TANK_SHELL_W: 12, TANK_INTERVAL: 0.35, CRATE_PENALTY: 8, MUL_STEP: 25, MUL_MAX: 5 };
+    TANK_TIME: 8, POWER_TIME: 8, STAGES: 5, MAX_COUNT: 300, STAGE_BASE: [12, 30, 50, 70, 90],
+    // Difficulty tuning: expected squad growth per encounter, enemy hit points as multiples of the expected squad size, enemy damage per second.
+    SCALE: { grow: 1.2, grunt: [2.5, 0.4], heavy: [5, 0.8], sniper: [1, 0.15], boss: [5, 1], dps: 0.03, bad: 1.0 }, TANK_SHELL_W: 12, TANK_INTERVAL: 0.35, CRATE_PENALTY: 8, MUL_STEP: 25, MUL_MAX: 5 };
 
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
   function roadHalfWidth(v) { return C.TOP_HALF + (C.BOTTOM_HALF - C.TOP_HALF) * v; }
@@ -82,21 +84,78 @@
     }
   }
 
-  function createState() {
-    // Order along the road (d = distance ahead). Every gate sits well before the next enemy so none is stuck behind a blocking enemy.
-    return { status: 'ready', t: 0, count: C.START_COUNT, u: 0, cool: 0, tcool: 0, hurt: 0, bullets: [], progress: 0, power: null, events: [], fireT: -1, tankT: -1,
-      gates: [
-        { type: 'add', value: 10, lane: 'L', u: -0.5, d: 0.9, half: 0.5 }, { type: 'mul', value: 2, lane: 'R', u: 0.5, d: 0.9, half: 0.5 },
-        { type: 'shoot', base: 1, hits: 0, max: 30, lane: 'R', u: 0.5, d: 1.35, half: 0.5 },
-        { type: 'crate', reward: 'tank', need: 500, hits: 0, lane: 'L', u: -0.5, d: 2.4, half: 0.5 },
-        { type: 'shootsub', base: 25, hits: 0, lane: 'R', u: 0.5, d: 2.4, half: 0.5 },
-        { type: 'pct', value: 40, lane: 'L', u: -0.5, d: 2.9, half: 0.5 }, { type: 'power', kind: 'rapid', lane: 'R', u: 0.5, d: 2.9, half: 0.5 },
-        { type: 'shootmul', hits: 0, max: (C.MUL_MAX - 1) * C.MUL_STEP, lane: 'L', u: -0.5, d: 3.4, half: 0.5 },
-        { type: 'crate', reward: 'soldiers', amount: 25, need: 200, hits: 0, lane: 'L', u: -0.5, d: 4.4, half: 0.5 },
-        { type: 'sub', value: 8, lane: 'L', u: -0.5, d: 4.9, half: 0.5 }, { type: 'pct', value: -20, lane: 'R', u: 0.5, d: 4.9, half: 0.5 }],
-      enemies: [{ id: 'e1', hp: 24, max: 24, lane: 'L', u: -0.5, d: 1.4, boss: false }, { id: 'e2', hp: 40, max: 40, lane: 'R', u: 0.5, d: 3.5, boss: false },
-        { id: 'boss', hp: 220, max: 220, u: 0, d: 5.6, boss: true, w: 0.3 }] };
+  // ---------- stage generator (deterministic per stage) ----------
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () { a = (a + 0x6D2B79F5) >>> 0; var x = a; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
   }
+  // Builds one stage as a sequence of encounters along the road (d = distance ahead). Every non-boss object fills exactly one lane
+  // and the two objects of an encounter never share a lane. Nothing ever waits: all objects scroll at the same constant speed.
+  // Numbers scale with the squad size a player is expected to have at that point (base * 1.2^segment, capped), so every stage stays tense.
+  function buildStage(n) {
+    var rnd = rng(9100 + n * 131), gates = [], enemies = [], d = 0.9, segs = 8 + n, eid = 0, base = C.STAGE_BASE[Math.min(n, C.STAGE_BASE.length) - 1], E = base;
+    var K = C.SCALE, ramp = 0.5 + 0.1 * n; // early stages are gentler: smaller penalties and weaker return fire
+    function expect(i) { return Math.min(C.MAX_COUNT, base * Math.pow(K.grow, i)); }
+    function laneU(l) { return l === 'L' ? -0.5 : 0.5; }
+    function gate(o, l) { o.lane = l; o.u = laneU(l); o.half = 0.5; o.d = d; gates.push(o); }
+    function foe(o, l) { o.id = 'e' + (++eid); o.lane = l; o.u = laneU(l); o.d = d + 0.05; o.boss = false; o.max = o.hp; enemies.push(o); }
+    var grunt = function () { return { kind: 'grunt', hp: Math.round(E * (K.grunt[0] + K.grunt[1] * n)), dps: Math.max(0.8, K.dps * E * ramp * 2) }; };
+    var heavy = function () { return { kind: 'heavy', hp: Math.round(E * (K.heavy[0] + K.heavy[1] * n)), dps: Math.max(1.2, 2.2 * K.dps * E * ramp * 2) }; };
+    var sniper = function () { return { kind: 'sniper', hp: Math.round(E * (K.sniper[0] + K.sniper[1] * n)), range: 1.0, dps: Math.max(0.6, 1.2 * K.dps * E * ramp * 2) }; };
+    function good(not) {
+      for (var i = 0; i < 6; i++) {
+        var r = rnd(), g = r < 0.4 ? { type: 'add', value: Math.max(6, Math.round(E * 0.5)) } : r < 0.75 ? { type: 'mul', value: 2 } : { type: 'pct', value: 25 + 5 * n };
+        if (!not || g.type !== not) return g;
+      }
+      return { type: 'add', value: Math.max(6, Math.round(E * 0.5)) };
+    }
+    function bad() { // a clearly bad option: the right lane matters
+      var r = rnd();
+      return r < 0.4 ? { type: 'sub', value: Math.max(6, Math.round(E * K.bad * ramp)) } : r < 0.75 ? { type: 'pct', value: -Math.round(15 + 40 * K.bad * ramp) } : { type: 'div', value: 2 };
+    }
+    var powers = ['rapid', 'heavy', 'shield'];
+    var T = {
+      pair: function (a, b) { var g1 = good(); gate(g1, a); gate(good(g1.type), b); },
+      mix: function (a, b) { gate(good(), a); gate(bad(), b); },
+      trap: function (a, b) { gate({ type: 'sub', value: Math.max(5, Math.round(E * 0.25)) }, a); gate({ type: 'pct', value: -(12 + 3 * n) }, b); },
+      shoot: function (a, b) { gate({ type: 'shoot', base: 1, hits: 0, max: Math.round(10 + E * 0.6) }, a); foe(grunt(), b); },
+      shootmul: function (a, b) { gate({ type: 'shootmul', hits: 0, max: (C.MUL_MAX - 1) * C.MUL_STEP }, a); foe(grunt(), b); },
+      crateTank: function (a, b) { gate({ type: 'crate', reward: 'tank', need: Math.round(Math.max(200, E * 8)), hits: 0 }, a); foe(grunt(), b); },
+      crateSoldiers: function (a, b) { gate({ type: 'crate', reward: 'soldiers', amount: Math.round(E * 0.5), need: Math.round(Math.max(120, E * 4)), hits: 0 }, a); gate({ type: 'shootsub', base: Math.max(8, Math.round(E * 0.3)), hits: 0 }, b); },
+      powerPair: function (a, b) { gate({ type: 'power', kind: powers[Math.floor(rnd() * 3)] }, a); gate(good(), b); },
+      ambush: function (a, b) { foe(grunt(), a); foe(grunt(), b); },
+      heavy: function (a, b) { foe(heavy(), a); gate(good(), b); },
+      sniper: function (a, b) { foe(sniper(), a); foe(sniper(), b); }
+    };
+    var names = Object.keys(T).concat(n >= 2 ? ['mix', 'mix'] : ['mix']), bag = [];
+    function pick() {
+      if (!bag.length) { bag = names.slice(); for (var i = bag.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), x = bag[i]; bag[i] = bag[j]; bag[j] = x; } }
+      return bag.pop();
+    }
+    for (var i = 0; i < segs; i++) {
+      E = expect(i);
+      var name = i === 0 ? 'pair' : i === segs - 1 ? 'trap' : pick(), flip = rnd() < 0.5;
+      T[name](flip ? 'L' : 'R', flip ? 'R' : 'L');
+      d += (name === 'ambush' || name === 'heavy' || name === 'sniper') ? 0.7 : 0.62;
+    }
+    var bossHp = Math.round(expect(segs) * (K.boss[0] + K.boss[1] * n));
+    enemies.push({ id: 'boss', hp: bossHp, max: bossHp, u: 0, d: d + 0.4, boss: true, w: 0.3 + 0.03 * n, kind: 'boss', dps: Math.max(2, 2.5 * K.dps * expect(segs)) });
+    return { gates: gates, enemies: enemies, theme: (n - 1) % 5 };
+  }
+  function loadStage(s, n) {
+    var st = buildStage(n);
+    s.stage = n; s.stages = C.STAGES; s.gates = st.gates; s.enemies = st.enemies; s.theme = st.theme; s.length = st.enemies[st.enemies.length - 1].d;
+    s.bullets = []; s.events = []; s.power = null; s.hurt = 0; s.progress = 0; s.stageStartCount = s.count; s.stageT = 0;
+  }
+  function createState(opts) {
+    opts = opts || {};
+    var n0 = opts.stage || 1, s = { status: 'ready', t: 0, totalT: 0, count: opts.count != null ? opts.count : Math.max(C.START_COUNT, C.STAGE_BASE[Math.min(n0, C.STAGE_BASE.length) - 1]), u: 0, cool: 0, tcool: 0, fireT: -1, tankT: -1 };
+    loadStage(s, opts.stage || 1);
+    return s;
+  }
+  // Half of the squad carries over, but never fewer soldiers than the next stage's base.
+  function nextStage(s) { var nx = s.stage + 1; s.count = Math.min(C.MAX_COUNT, Math.max(C.STAGE_BASE[Math.min(nx, C.STAGE_BASE.length) - 1], Math.round(s.count * 0.5))); loadStage(s, nx); s.status = 'playing'; return s; }
+  function retryStage(s) { s.count = s.stageStartCount; loadStage(s, s.stage); s.status = 'playing'; return s; }
   function start(s) { s.status = 'playing'; return s; }
 
   // Something worth shooting is ahead (an enemy or a gate that can still absorb hits).
@@ -117,11 +176,12 @@
 
   function step(s, dt, input) {
     if (s.status !== 'playing') return s;
-    s.t += dt; s.u = clamp(s.u + clamp(input || 0, -1, 1) * dt * 0.9, -0.85, 0.85);
+    s.t += dt; s.totalT += dt; s.stageT += dt; s.u = clamp(s.u + clamp(input || 0, -1, 1) * dt * 0.9, -0.85, 0.85);
     if (s.power) { s.power.t -= dt; if (s.power.t <= 0) s.power = null; }
     var scroll = C.SPEED * dt; s.progress += scroll; // the road never stops: nothing waits in front of the squad
     s.gates.forEach(function (g) { g.d -= scroll; });
     s.enemies.forEach(function (e) { e.d -= scroll; });
+    if (s.count > C.MAX_COUNT) s.count = C.MAX_COUNT;
     var fd = frontD(s.count), immune = !!(s.power && (s.power.kind === 'tank' || s.power.kind === 'shield'));
     s.gates.forEach(function (g) {
       if (!g.done && g.d <= fd) { g.done = true; if (covers(g, s.u)) { if (g.type === 'power') grantPower(s, g.kind); else s.count = applyGate(g, s.count); } }
@@ -149,11 +209,13 @@
       }
       return b.d <= 1.05;
     });
-    var engaged = s.enemies.filter(function (e) { return e.hp > 0 && e.d <= C.ENEMY_RANGE; }).length;
-    if (!immune) s.hurt += engaged * C.ENEMY_DPS * dt; // tank and shield protect the squad
+    var dmg = 0; // each enemy hurts the squad while it is in its own range (snipers reach further, heavies hit harder)
+    s.enemies.forEach(function (e) { if (e.hp > 0 && e.d <= (e.range || C.ENEMY_RANGE)) dmg += (e.dps !== undefined ? e.dps : C.ENEMY_DPS); });
+    if (!immune) s.hurt += dmg * dt; // tank and shield protect the squad
     while (s.hurt >= 1) { s.hurt -= 1; s.count = Math.max(0, s.count - 1); }
+    if (s.count > C.MAX_COUNT) s.count = C.MAX_COUNT;
     if (s.count <= 0) { s.status = 'lost'; s.power = null; }
-    else if (s.enemies.every(function (e) { return e.hp <= 0; })) { s.status = 'won'; s.power = null; }
+    else if (s.enemies.every(function (e) { return e.hp <= 0; })) { s.status = s.stage >= s.stages ? 'won' : 'stageclear'; s.power = null; }
     return s;
   }
   // Advance by dt * speed in fixed sub-steps (<= 1/60 s) so collisions stay accurate at x2..x4.
@@ -163,5 +225,5 @@
     return s;
   }
   return { C: C, advance: advance, roadHalfWidth: roadHalfWidth, toScreen: toScreen, layout: layout, frontD: frontD, applyGate: applyGate,
-    covers: covers, gateValue: gateValue, isShootable: isShootable, isOpen: isOpen, createState: createState, start: start, step: step };
+    covers: covers, gateValue: gateValue, isShootable: isShootable, isOpen: isOpen, createState: createState, buildStage: buildStage, nextStage: nextStage, retryStage: retryStage, start: start, step: step };
 });

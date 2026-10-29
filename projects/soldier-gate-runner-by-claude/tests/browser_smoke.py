@@ -36,27 +36,43 @@ def main(screenshot=None):
 
         page.click("#ov-btn")
         assert status() == "playing" and page.locator("#overlay").is_hidden()
+        total0 = page.evaluate("window.__game.state.enemies.reduce((a, e) => a + e.hp, 0)")
         page.evaluate("window.__game.state.count = 60; window.__game.fastForward(24)")
         if screenshot:
             page.screenshot(path=screenshot)
-        before = page.evaluate("window.__game.state.enemies.reduce((a, e) => a + e.hp, 0)")
-        assert before < 284, f"no enemy damage: {before}"
+        total1 = page.evaluate("window.__game.state.enemies.reduce((a, e) => a + e.hp, 0)")
+        assert total1 < total0, f"no enemy damage: {total0} -> {total1}"
+        assert page.evaluate("window.__game.state.stage") == 1
 
-        # win path
-        page.evaluate("window.__game.state.count = 300; window.__game.fastForward(120)")
-        assert status() == "won", status()
-        assert "승리" in page.locator("#ov-title").inner_text() and page.locator("#ov-btn").inner_text() == "다시 시작"
+        # whole campaign: five stages, each cleared in turn, the squad carried over, the last one ends in a win
+        for n in range(1, 6):
+            assert page.evaluate("window.__game.state.stage") == n, n
+            page.evaluate("window.__game.state.count = 300; window.__game.fastForward(300)")
+            if n < 5:
+                assert status() == "stageclear", (n, status())
+                assert f"STAGE {n}" in page.locator("#ov-title").inner_text() and page.locator("#ov-btn").inner_text() == "다음 단계"
+                page.click("#ov-btn"); assert status() == "playing"
+            else:
+                assert status() == "won", status()
+                assert "승리" in page.locator("#ov-title").inner_text() and page.locator("#ov-btn").inner_text() == "처음부터"
 
-        # restart clears previous round state
+        # restart clears previous run state and goes back to stage 1
         page.click("#ov-btn")
         assert status() == "playing"
-        fresh = page.evaluate("({c: window.__game.state.count, h: window.__game.state.gates.map(g => g.hits || 0)})")
-        assert fresh["c"] == 12 and sum(fresh["h"]) == 0, fresh
+        fresh = page.evaluate("({c: window.__game.state.count, s: window.__game.state.stage, h: window.__game.state.gates.map(g => g.hits || 0)})")
+        assert fresh["c"] == 12 and fresh["s"] == 1 and sum(fresh["h"]) == 0, fresh
 
-        # lose path
+        # lose path: "retry this stage" restores the stage start, "from the start" begins a new run
         page.evaluate("window.__game.state.count = 1; window.__game.state.gates = []; window.__game.fastForward(60)")
         assert status() == "lost", status()
-        assert "패배" in page.locator("#ov-title").inner_text()
+        assert "패배" in page.locator("#ov-title").inner_text() and page.locator("#ov-btn").inner_text() == "이 단계 다시"
+        assert page.locator("#ov-btn2").is_visible() and page.locator("#ov-btn2").inner_text() == "처음부터"
+        page.click("#ov-btn"); assert status() == "playing" and page.evaluate("window.__game.state.count") == 12
+        page.evaluate("window.__game.state.count = 1; window.__game.state.gates = []; window.__game.fastForward(60)")
+        assert status() == "lost"
+        page.click("#ov-btn2"); assert status() == "playing" and page.evaluate("window.__game.state.stage") == 1 and page.locator("#ov-btn2").is_hidden()
+        page.evaluate("window.__game.state.count = 1; window.__game.state.gates = []; window.__game.fastForward(60)")
+        assert status() == "lost"
 
         # speed selector: all of x1..x4 visible at once, selectable directly, and never covering the game screen
         labels = page.locator("#speedbar button").all_inner_texts()
