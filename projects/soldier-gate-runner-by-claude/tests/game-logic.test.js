@@ -339,3 +339,37 @@ test('a lane gate applies only to the squad that is in that lane when it makes c
     assert.strictEqual(s.count, applied === 'L' ? 15 : 110, `squad at ${squadU}`);
   }
 });
+
+// ---- M3 combat effects: the renderer gets events, hit timestamps and fire timestamps from the logic ----
+test('firing stamps the volley time so muzzle flashes can be drawn', () => {
+  const s = G.start(G.createState()); s.gates = []; s.enemies = [{ id: 'e', hp: 999, max: 999, lane: 'R', u: 0.5, d: 0.9, boss: false }]; s.u = 0.5;
+  assert.strictEqual(s.fireT, -1);
+  G.step(s, 1 / 60, 0); assert.strictEqual(s.fireT, s.t);
+  const first = s.fireT; for (let i = 0; i < 5; i++) G.step(s, 1 / 60, 0); assert.ok(s.fireT >= first);
+});
+
+test('hits emit impact events with a road position and mark the enemy as just hit', () => {
+  const s = G.start(G.createState()); s.gates = []; s.u = 0.5; s.count = 20;
+  s.enemies = [{ id: 'e', hp: 999, max: 999, lane: 'R', u: 0.5, d: 0.9, boss: false }];
+  for (let i = 0; i < 90; i++) G.step(s, 1 / 60, 0);
+  const hits = s.events.filter((e) => e.k === 'hit' && e.t === 'e');
+  assert.ok(hits.length > 0 && s.enemies[0].hitT !== undefined && s.t - s.enemies[0].hitT < 0.5);
+  hits.forEach((e) => { assert.ok(Math.abs(e.u) <= 1 && e.d > 0 && e.d <= 1.05); });
+});
+
+test('killing an enemy emits a die event (boss flagged), and breaking a crate emits a break event', () => {
+  const s = G.start(G.createState()); s.gates = []; s.u = 0; s.count = 60;
+  s.enemies = [{ id: 'boss', hp: 30, max: 30, u: 0, d: 0.9, boss: true, w: 0.3 }];
+  for (let i = 0; i < 300 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  const die = s.events.filter((e) => e.k === 'die'); assert.strictEqual(die.length, 1); assert.strictEqual(die[0].boss, true);
+  const c = G.start(G.createState()); c.enemies = [{ id: 'far', hp: 999, max: 999, lane: 'L', u: -0.5, d: 10, boss: false }]; c.u = 0.85; c.count = 80;
+  c.gates = [{ type: 'crate', reward: 'soldiers', amount: 5, need: 100, hits: 0, lane: 'R', u: 0.5, d: 0.9, half: 0.5 }];
+  for (let i = 0; i < 600 && !c.gates[0].broken; i++) G.step(c, 1 / 60, 0);
+  assert.ok(c.events.some((e) => e.k === 'break'));
+});
+
+test('the event queue is capped even if the renderer never drains it', () => {
+  const s = G.start(G.createState()); s.count = 300; s.u = 0;
+  for (let i = 0; i < 60 * 40 && s.status === 'playing'; i++) G.step(s, 1 / 60, 0);
+  assert.ok(s.events.length <= 400);
+});
